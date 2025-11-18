@@ -1,0 +1,115 @@
+name: "code-review-comprehensive"
+description: "Multi-stage code review with analysis, issue identification, improvement suggestions, and validation"
+version: "1.0.0"
+author: "Amplifier Recipes Collection"
+tags: ["code-review", "quality", "analysis", "python"]
+
+# This recipe performs comprehensive code review in four stages:
+# 1. Analyze code structure and patterns
+# 2. Identify specific issues and anti-patterns
+# 3. Generate concrete improvement suggestions
+# 4. Validate suggestions for feasibility
+#
+# Typical runtime: 5-10 minutes
+# Required agents: zen-architect
+#
+# Usage:
+#   amplifier run "execute code-review-recipe.yaml with file_path=src/auth.py"
+
+context:
+  file_path: ""  # Required: path to Python file to review
+
+steps:
+  - id: "analyze-structure"
+    agent: "zen-architect"
+    mode: "ANALYZE"
+    prompt: |
+      Analyze the code structure in {{file_path}}:
+
+      1. Overall architecture and organization
+      2. Code patterns and design choices
+      3. Complexity assessment
+      4. Alignment with implementation philosophy principles
+
+      Provide a structured analysis focusing on what exists and how it works.
+    output: "structure_analysis"
+    timeout: 600
+
+  - id: "identify-issues"
+    agent: "zen-architect"
+    mode: "ANALYZE"
+    prompt: |
+      Based on this analysis: {{structure_analysis}}
+
+      Identify specific issues in {{file_path}}:
+
+      1. Anti-patterns and code smells
+      2. Complexity hotspots
+      3. Philosophy violations (unnecessary abstraction, future-proofing, etc.)
+      4. Potential bugs or edge cases
+
+      For each issue, provide:
+      - Location (line numbers or function names)
+      - Severity (critical/high/medium/low)
+      - Explanation of the problem
+      - Impact on maintainability
+
+      Focus on issues that genuinely impact quality, not style preferences.
+    output: "identified_issues"
+    timeout: 600
+
+  - id: "suggest-improvements"
+    agent: "zen-architect"
+    mode: "ARCHITECT"
+    prompt: |
+      Given this analysis: {{structure_analysis}}
+      And these issues: {{identified_issues}}
+
+      Design concrete improvement suggestions for {{file_path}}:
+
+      1. For each critical/high issue, provide specific solution
+      2. Suggest refactoring opportunities (where they genuinely simplify)
+      3. Recommend testing strategies
+      4. Identify what should be kept (don't change for the sake of change)
+
+      For each suggestion:
+      - What to change
+      - Why it improves the code
+      - How to implement (specific steps)
+      - Potential risks or trade-offs
+
+      Prioritize ruthless simplicity over clever solutions.
+    output: "improvement_suggestions"
+    timeout: 600
+
+  - id: "validate-suggestions"
+    agent: "zen-architect"
+    mode: "REVIEW"
+    prompt: |
+      Review these improvement suggestions: {{improvement_suggestions}}
+
+      For the file: {{file_path}}
+      With these issues: {{identified_issues}}
+
+      Validate each suggestion:
+
+      1. Feasibility: Can this be implemented safely?
+      2. Value: Does this genuinely improve the code?
+      3. Scope: Is this the right level of change?
+      4. Philosophy alignment: Does this follow ruthless simplicity?
+
+      Provide:
+      - Priority ranking (must-do / should-do / nice-to-have)
+      - Implementation order (dependencies between changes)
+      - Time estimates (rough effort)
+      - Any suggestions to drop (not worth the effort)
+
+      Be honest about what's truly valuable vs what's just "different".
+    output: "validated_suggestions"
+    timeout: 300
+
+# Example output structure:
+# structure_analysis: Code organization, patterns, complexity assessment
+# identified_issues: List of issues with severity and location
+# improvement_suggestions: Concrete solutions with implementation steps
+# validated_suggestions: Prioritized, feasible action items

@@ -1,0 +1,75 @@
+name: "security-audit-comprehensive"
+description: "Multi-perspective security analysis covering vulnerabilities, configurations, and dependencies"
+version: "1.0.0"
+author: "Amplifier Recipes Collection"
+tags: ["security", "audit", "vulnerabilities", "python"]
+
+# Comprehensive security audit workflow
+# Required agents: security-guardian, zen-architect
+
+context:
+  file_path: ""               # Required: path to code file
+  severity_threshold: "high"  # Optional: minimum severity to report
+
+steps:
+  - id: "vulnerability-scan"
+    agent: "security-guardian"
+    prompt: |
+      Perform security vulnerability scan on {{file_path}}:
+
+      Focus on {{severity_threshold}}-severity and above.
+
+      Check for:
+      1. SQL injection risks
+      2. Cross-site scripting (XSS)
+      3. Authentication/authorization issues
+      4. Insecure data handling
+      5. Cryptography misuse
+
+      For each finding: location, severity, explanation, fix.
+    output: "vulnerability_findings"
+    timeout: 600
+
+  - id: "configuration-review"
+    agent: "security-guardian"
+    prompt: |
+      Review security configurations in {{file_path}}:
+
+      Check:
+      1. Hardcoded secrets or credentials
+      2. Insecure defaults
+      3. Missing security headers
+      4. Unsafe permissions
+
+      Severity threshold: {{severity_threshold}}
+    output: "configuration_issues"
+    timeout: 300
+
+  - id: "dependency-audit"
+    agent: "security-guardian"
+    prompt: |
+      Audit dependencies for known vulnerabilities.
+
+      Check CVE databases and security advisories.
+      Report {{severity_threshold}}-severity and above.
+    output: "dependency_vulnerabilities"
+    timeout: 300
+
+  - id: "synthesize-findings"
+    agent: "zen-architect"
+    mode: "ARCHITECT"
+    prompt: |
+      Synthesize security findings:
+
+      Vulnerabilities: {{vulnerability_findings}}
+      Configuration: {{configuration_issues}}
+      Dependencies: {{dependency_vulnerabilities}}
+
+      Create prioritized remediation plan with:
+      1. Critical fixes (immediate action)
+      2. High-priority improvements
+      3. Long-term security enhancements
+
+      For each item: impact, effort, implementation steps.
+    output: "remediation_plan"
+    timeout: 300

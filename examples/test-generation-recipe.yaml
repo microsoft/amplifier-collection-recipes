@@ -1,0 +1,123 @@
+name: "test-generation-comprehensive"
+description: "Generate comprehensive test suite with unit, integration, and edge case tests"
+version: "1.0.0"
+author: "Amplifier Recipes Collection"
+tags: ["testing", "quality", "python", "pytest"]
+
+# This recipe generates comprehensive test suites:
+# 1. Analyze code to understand testable components
+# 2. Design test strategy covering critical paths
+# 3. Generate actual test code ready to use
+#
+# Typical runtime: 5-10 minutes
+# Required agents: zen-architect, test-coverage
+#
+# Usage:
+#   amplifier run "execute test-generation-recipe.yaml with file_path=src/utils.py test_framework=pytest"
+
+context:
+  file_path: ""           # Required: path to code file
+  test_framework: "pytest" # Optional: pytest, unittest (default: pytest)
+  coverage_target: 80     # Optional: target coverage % (default: 80)
+
+steps:
+  - id: "analyze-code-structure"
+    agent: "zen-architect"
+    mode: "ANALYZE"
+    prompt: |
+      Analyze {{file_path}} for test generation:
+
+      Extract:
+      1. **Functions/methods**: Name, parameters, return types
+      2. **Dependencies**: External calls, imports, side effects
+      3. **Edge cases**: Boundary conditions, error paths
+      4. **State management**: Stateful vs stateless components
+
+      Identify testable components and their complexity.
+      Note any components that are difficult to test (why?).
+    output: "code_analysis"
+    timeout: 300
+
+  - id: "design-test-strategy"
+    agent: "test-coverage"
+    prompt: |
+      Based on this code analysis: {{code_analysis}}
+
+      For: {{file_path}}
+      Framework: {{test_framework}}
+      Target coverage: {{coverage_target}}%
+
+      Design test strategy:
+
+      1. **Unit tests**: Test each function/method in isolation
+      2. **Integration tests**: Test component interactions
+      3. **Edge case tests**: Boundary conditions, error handling
+      4. **Fixtures needed**: Test data, mocks, setup/teardown
+
+      For each test category:
+      - What to test
+      - Why it's important
+      - Test approach (mocks, fixtures, etc.)
+      - Estimated number of test cases
+
+      Prioritize tests by:
+      - Critical path coverage
+      - Complexity of code under test
+      - Risk of bugs
+
+      Aim for {{coverage_target}}% coverage with focused, valuable tests.
+    output: "test_strategy"
+    timeout: 600
+
+  - id: "generate-test-code"
+    agent: "test-coverage"
+    prompt: |
+      Generate actual test code based on:
+
+      Test strategy: {{test_strategy}}
+      Code analysis: {{code_analysis}}
+      Framework: {{test_framework}}
+
+      Create complete test file for {{file_path}}:
+
+      ```python
+      # test_{filename}.py
+      import pytest  # or unittest
+      from {module} import {functions}
+
+      # Fixtures
+      @pytest.fixture
+      def ...
+
+      # Unit tests
+      def test_{function}_normal_case():
+          """Test description"""
+          # Arrange
+          # Act
+          # Assert
+
+      # Edge case tests
+      def test_{function}_edge_case():
+          ...
+
+      # Error handling tests
+      def test_{function}_error_handling():
+          ...
+      ```
+
+      Include:
+      - Proper imports
+      - Fixtures/setup where needed
+      - Clear test names and docstrings
+      - Arrange-Act-Assert pattern
+      - Edge cases and error paths
+      - Mocks for external dependencies
+
+      Make tests copy-paste ready and runnable.
+    output: "test_code"
+    timeout: 600
+
+# Example output:
+# code_analysis: Functions, dependencies, edge cases identified
+# test_strategy: Structured plan for unit/integration/edge case tests
+# test_code: Complete, runnable test file

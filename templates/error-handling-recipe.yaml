@@ -1,0 +1,102 @@
+# Error Handling Recipe Template
+#
+# This template demonstrates error handling strategies:
+# - Retry logic for transient failures
+# - Graceful degradation with on_error
+# - Timeout configuration
+# - Critical vs optional steps
+
+name: "my-error-handling-recipe"
+description: "Recipe demonstrating comprehensive error handling patterns"
+version: "1.0.0"
+tags: ["error-handling", "resilience", "retry"]
+
+context:
+  input_data: ""
+  max_retries: 3
+
+steps:
+  # Critical step: Must succeed or recipe fails
+  - id: "critical-validation"
+    agent: "zen-architect"
+    mode: "ANALYZE"
+    prompt: |
+      Validate {{input_data}} is valid and ready for processing.
+
+      This step is critical - recipe cannot continue without it.
+    output: "validation_result"
+    timeout: 300
+    # Default: on_error="fail" - recipe stops if this fails
+    retry:
+      max_attempts: "{{max_retries}}"
+      backoff: "exponential"
+      initial_delay: 5
+      max_delay: 60
+
+  # Risky step: External operation with retry
+  - id: "fetch-external-data"
+    agent: "zen-architect"
+    prompt: |
+      Fetch additional data needed for processing.
+
+      This may fail due to network issues - will retry automatically.
+    output: "external_data"
+    timeout: 600  # Longer timeout for external operations
+    retry:
+      max_attempts: 5           # More retries for network operations
+      backoff: "exponential"
+      initial_delay: 10
+      max_delay: 300
+
+  # Optional enhancement: Continue even if fails
+  - id: "optional-enhancement"
+    agent: "zen-architect"
+    mode: "ARCHITECT"
+    prompt: |
+      Enhance results with additional analysis.
+
+      This is optional - recipe can succeed without it.
+    output: "enhancement"
+    timeout: 300
+    on_error: "continue"  # Recipe continues even if this fails
+    retry:
+      max_attempts: 2     # Fewer retries for optional work
+
+  # Process with whatever we have
+  - id: "process-results"
+    agent: "zen-architect"
+    mode: "ANALYZE"
+    prompt: |
+      Process results:
+
+      Validation: {{validation_result}}
+      External data: {{external_data}}
+      Enhancement: {{enhancement}}  # May be empty if enhancement failed
+
+      Create final output handling partial results gracefully.
+    output: "final_result"
+    timeout: 300
+
+# Error handling patterns demonstrated:
+#
+# 1. Critical steps (default on_error="fail"):
+#    - Recipe stops on failure
+#    - Use for validation, required inputs
+#
+# 2. Retry for transient failures:
+#    - Network operations
+#    - External services
+#    - File I/O (cloud sync issues)
+#
+# 3. Optional steps (on_error="continue"):
+#    - Enhancements
+#    - Nice-to-have features
+#    - Non-critical validations
+#
+# 4. Timeout tuning:
+#    - Quick operations: 60-300 seconds
+#    - Standard operations: 300-600 seconds
+#    - Long operations: 600-1800 seconds
+#
+# Usage:
+#   amplifier run "execute error-handling-recipe.yaml with input_data=test.json"

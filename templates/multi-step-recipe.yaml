@@ -1,0 +1,123 @@
+# Multi-Step Recipe Template
+#
+# This template demonstrates a more complex workflow with:
+# - Multiple context variables
+# - Error handling
+# - Agent configuration overrides
+# - Progressive refinement pattern
+
+name: "my-multi-step-recipe"
+description: "Multi-stage workflow with analysis, refinement, and validation"
+version: "1.0.0"
+tags: ["multi-step", "refinement", "validation"]
+
+# Context: Define all variables upfront
+context:
+  # Required inputs
+  primary_input: ""
+  target: ""
+
+  # Optional configuration
+  quality_threshold: "high"  # high, medium, low
+  max_iterations: 3
+  auto_validate: true
+
+  # Computed values
+  output_file: "{{target}}_results.md"
+
+steps:
+  # Stage 1: Initial Analysis
+  - id: "analyze"
+    agent: "zen-architect"
+    mode: "ANALYZE"
+    prompt: |
+      Analyze {{primary_input}} for {{target}}.
+
+      Quality threshold: {{quality_threshold}}
+
+      Provide comprehensive analysis covering:
+      1. Current state
+      2. Issues and opportunities
+      3. Recommendations
+    output: "analysis"
+    timeout: 600
+    retry:
+      max_attempts: 3
+      backoff: "exponential"
+
+  # Stage 2: Design Improvements
+  - id: "design-improvements"
+    agent: "zen-architect"
+    mode: "ARCHITECT"
+    prompt: |
+      Based on this analysis: {{analysis}}
+
+      Design improvements for {{target}}:
+
+      Requirements:
+      - Must meet {{quality_threshold}} quality threshold
+      - Maximum {{max_iterations}} iterations
+      - Focus on high-impact changes
+
+      Provide specific, actionable improvements.
+    output: "improvements"
+    timeout: 600
+
+  # Stage 3: Validate (optional based on context)
+  - id: "validate-improvements"
+    agent: "zen-architect"
+    mode: "REVIEW"
+    prompt: |
+      Validate these improvements: {{improvements}}
+
+      Against analysis: {{analysis}}
+      For target: {{target}}
+
+      Check:
+      1. Feasibility
+      2. Impact
+      3. Alignment with {{quality_threshold}} threshold
+
+      Approve, modify, or reject each improvement.
+    output: "validation"
+    timeout: 300
+    on_error: "continue"  # Optional step - continue even if fails
+
+  # Stage 4: Synthesize Results
+  - id: "synthesize"
+    agent: "zen-architect"
+    mode: "ANALYZE"
+    agent_config:
+      # Override agent settings for this step
+      providers:
+        - module: "provider-anthropic"
+          config:
+            temperature: 0.5  # More creative for synthesis
+    prompt: |
+      Create comprehensive report:
+
+      Input: {{primary_input}}
+      Target: {{target}}
+      Analysis: {{analysis}}
+      Improvements: {{improvements}}
+      Validation: {{validation}}
+
+      Generate final recommendations for {{output_file}}.
+
+      Format as markdown with executive summary and detailed sections.
+    output: "final_report"
+    timeout: 300
+
+# Usage examples:
+#
+# Basic:
+#   amplifier run "execute multi-step-recipe.yaml with primary_input=code.py target=refactoring"
+#
+# With options:
+#   amplifier run "execute multi-step-recipe.yaml with primary_input=docs.md target=improvement quality_threshold=medium"
+#
+# Expected outputs:
+#   - analysis: Comprehensive analysis results
+#   - improvements: Designed improvements
+#   - validation: Validation results (may be empty if step failed)
+#   - final_report: Complete markdown report

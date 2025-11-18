@@ -1,0 +1,124 @@
+name: "dependency-upgrade-systematic"
+description: "Systematic dependency upgrade with audit, planning, validation, and execution"
+version: "1.0.0"
+author: "Amplifier Recipes Collection"
+tags: ["dependencies", "devops", "maintenance", "python"]
+
+# This recipe performs systematic dependency upgrades:
+# 1. Audit current dependencies and available updates
+# 2. Plan upgrade strategy with risk assessment
+# 3. Validate compatibility and breaking changes
+# 4. Generate upgrade commands and scripts
+#
+# Typical runtime: 10-15 minutes
+# Required agents: zen-architect, integration-specialist
+#
+# Usage:
+#   amplifier run "execute dependency-upgrade-recipe.yaml with project_path=. package_manager=pip"
+
+context:
+  project_path: ""        # Required: path to project directory
+  package_manager: "pip"  # Optional: pip, uv, npm, etc. (default: pip)
+
+steps:
+  - id: "audit-dependencies"
+    agent: "integration-specialist"
+    prompt: |
+      Audit Python dependencies in {{project_path}}:
+
+      Package manager: {{package_manager}}
+
+      Tasks:
+      1. List current dependencies (pyproject.toml, requirements.txt)
+      2. Check for available updates
+      3. Identify security vulnerabilities (if any)
+      4. Note deprecated packages
+
+      Output format:
+      For each dependency:
+      - Current version
+      - Latest version
+      - Security issues (if any)
+      - Breaking changes indicator
+      - Update priority (critical/high/medium/low)
+    output: "dependency_audit"
+    timeout: 600
+
+  - id: "plan-upgrade-strategy"
+    agent: "zen-architect"
+    mode: "ARCHITECT"
+    prompt: |
+      Based on this dependency audit: {{dependency_audit}}
+
+      For project: {{project_path}}
+      Using: {{package_manager}}
+
+      Create upgrade strategy:
+
+      1. **Upgrade order**: Which dependencies first (resolve conflicts, minimize risk)
+      2. **Risk assessment**: Major version changes, known breaking changes
+      3. **Testing strategy**: What to test after each upgrade
+      4. **Rollback plan**: How to revert if issues found
+
+      Consider:
+      - Security fixes should be prioritized
+      - Major version upgrades need careful testing
+      - Dependencies with many dependents upgraded last
+      - Group compatible upgrades together
+
+      Output structured plan with phases.
+    output: "upgrade_plan"
+    timeout: 300
+
+  - id: "validate-compatibility"
+    agent: "integration-specialist"
+    prompt: |
+      Validate compatibility for this upgrade plan: {{upgrade_plan}}
+
+      For project: {{project_path}}
+
+      Check:
+      1. Breaking changes in release notes
+      2. Python version compatibility
+      3. Dependency conflicts (new versions compatible with each other?)
+      4. Known migration issues
+
+      For each proposed upgrade:
+      - Compatibility status (safe / needs-testing / risky)
+      - Breaking changes summary
+      - Migration steps required
+      - Estimated effort
+
+      Flag any upgrades that should be deferred or split into separate work.
+    output: "compatibility_check"
+    timeout: 600
+
+  - id: "generate-upgrade-commands"
+    agent: "integration-specialist"
+    prompt: |
+      Generate executable upgrade commands based on:
+
+      Upgrade plan: {{upgrade_plan}}
+      Compatibility check: {{compatibility_check}}
+      Package manager: {{package_manager}}
+
+      Create:
+      1. **Phase 1 commands**: Critical security fixes (safe upgrades)
+      2. **Phase 2 commands**: Minor version updates (low risk)
+      3. **Phase 3 commands**: Major version updates (higher risk)
+
+      For each phase:
+      - Exact commands to run
+      - Pre-upgrade checks
+      - Post-upgrade tests to run
+      - Rollback commands (if needed)
+
+      Make commands copy-paste ready.
+    output: "upgrade_commands"
+    timeout: 300
+
+# Example output:
+# dependency_audit: List of dependencies with current/latest versions
+# upgrade_plan: Structured strategy with phases and risk assessment
+# compatibility_check: Validation of breaking changes and conflicts
+# upgrade_commands: Ready-to-execute upgrade commands by phase

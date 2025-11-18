@@ -1,0 +1,53 @@
+# Simple Recipe Template
+#
+# This template provides a minimal recipe structure.
+# Copy and customize for your own workflows.
+
+name: "my-simple-recipe"
+description: "Brief description of what this recipe does"
+version: "1.0.0"
+
+# Context variables (inputs to the recipe)
+context:
+  input_variable: ""  # Required: describe what this is
+  optional_setting: "default_value"  # Optional: with default
+
+steps:
+  # Step 1: First action
+  - id: "first-step"
+    agent: "zen-architect"  # Choose appropriate agent
+    mode: "ANALYZE"         # Specify mode if agent supports it
+    prompt: |
+      Describe what the agent should do.
+
+      Use context variables: {{input_variable}}
+      And settings: {{optional_setting}}
+
+      Be specific about expected output format.
+    output: "first_result"  # Store result for later steps
+    timeout: 300            # Timeout in seconds (5 minutes)
+
+  # Step 2: Second action using first result
+  - id: "second-step"
+    agent: "zen-architect"
+    mode: "ARCHITECT"
+    prompt: |
+      Based on the previous result: {{first_result}}
+
+      Perform the next action.
+    output: "second_result"
+    timeout: 300
+
+  # Step 3: Final action
+  - id: "final-step"
+    agent: "zen-architect"
+    mode: "ANALYZE"
+    prompt: |
+      Create final output combining:
+      - First result: {{first_result}}
+      - Second result: {{second_result}}
+    # No output needed for final step
+    timeout: 300
+
+# Usage:
+#   amplifier run "execute simple-recipe.yaml with input_variable=value"

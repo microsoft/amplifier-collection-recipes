@@ -1,0 +1,49 @@
+name: "simple-analysis-workflow"
+description: "Basic analysis workflow demonstrating core recipe concepts"
+version: "1.0.0"
+author: "Amplifier Recipes Collection"
+tags: ["tutorial", "simple", "analysis"]
+
+# Simple example demonstrating core recipe concepts:
+# - Context variables
+# - Sequential steps
+# - Output accumulation
+#
+# Usage:
+#   amplifier run "execute simple-analysis-recipe.yaml with file_path=README.md"
+
+context:
+  file_path: ""  # Required: path to file to analyze
+
+steps:
+  - id: "extract-summary"
+    agent: "zen-architect"
+    mode: "ANALYZE"
+    prompt: |
+      Read {{file_path}} and extract a 3-sentence summary.
+    output: "summary"
+    timeout: 300
+
+  - id: "identify-key-points"
+    agent: "zen-architect"
+    mode: "ANALYZE"
+    prompt: |
+      Based on this summary: {{summary}}
+
+      Identify 3-5 key points from {{file_path}}.
+    output: "key_points"
+    timeout: 300
+
+  - id: "generate-report"
+    agent: "zen-architect"
+    mode: "ANALYZE"
+    prompt: |
+      Create a brief analysis report:
+
+      File: {{file_path}}
+      Summary: {{summary}}
+      Key Points: {{key_points}}
+
+      Format as markdown.
+    output: "report"
+    timeout: 300
