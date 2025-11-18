@@ -13,7 +13,7 @@ context:
 
 steps:
   - id: "vulnerability-scan"
-    agent: "security-guardian"
+    agent: "developer-expertise:security-guardian"
     prompt: |
       Perform security vulnerability scan on {{file_path}}:
 
@@ -31,7 +31,7 @@ steps:
     timeout: 600
 
   - id: "configuration-review"
-    agent: "security-guardian"
+    agent: "developer-expertise:security-guardian"
     prompt: |
       Review security configurations in {{file_path}}:
 
@@ -46,7 +46,7 @@ steps:
     timeout: 300
 
   - id: "dependency-audit"
-    agent: "security-guardian"
+    agent: "developer-expertise:security-guardian"
     prompt: |
       Audit dependencies for known vulnerabilities.
 

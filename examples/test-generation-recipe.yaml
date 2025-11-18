@@ -39,7 +39,7 @@ steps:
     timeout: 300
 
   - id: "design-test-strategy"
-    agent: "test-coverage"
+    agent: "developer-expertise:test-coverage"
     prompt: |
       Based on this code analysis: {{code_analysis}}
 
@@ -70,7 +70,7 @@ steps:
     timeout: 600
 
   - id: "generate-test-code"
-    agent: "test-coverage"
+    agent: "developer-expertise:test-coverage"
     prompt: |
       Generate actual test code based on:
 

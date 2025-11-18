@@ -22,7 +22,7 @@ context:
 
 steps:
   - id: "audit-dependencies"
-    agent: "integration-specialist"
+    agent: "developer-expertise:integration-specialist"
     prompt: |
       Audit Python dependencies in {{project_path}}:
 
@@ -71,7 +71,7 @@ steps:
     timeout: 300
 
   - id: "validate-compatibility"
-    agent: "integration-specialist"
+    agent: "developer-expertise:integration-specialist"
     prompt: |
       Validate compatibility for this upgrade plan: {{upgrade_plan}}
 
@@ -94,7 +94,7 @@ steps:
     timeout: 600
 
   - id: "generate-upgrade-commands"
-    agent: "integration-specialist"
+    agent: "developer-expertise:integration-specialist"
     prompt: |
       Generate executable upgrade commands based on:
 
