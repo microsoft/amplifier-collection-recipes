@@ -11,10 +11,29 @@ from .models import Recipe
 
 
 def generate_session_id() -> str:
-    """Generate unique session ID with timestamp."""
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    random_suffix = uuid.uuid4().hex[:8]
-    return f"recipe_{timestamp}_{random_suffix}"
+    """Generate unique session ID following W3C Trace Context pattern.
+
+    Format: {span}-{timestamp}_{identifier}
+    Example: 7cc787dd22d54f6c-20251118-114317_recipe
+
+    This follows the same W3C Trace Context principles as sub-sessions:
+    - Span ID (16 hex chars) for distributed tracing compatibility
+    - Timestamp for human readability and chronological sorting
+    - Identifier suffix ("recipe") for session type clarity
+    - Underscore separator before identifier (consistent with sub-session agent names)
+
+    Returns:
+        Session ID string in W3C Trace Context compatible format
+    """
+    # Generate 16-char hex span ID (W3C Trace Context standard)
+    span_id = uuid.uuid4().hex[:16]
+
+    # Human-readable timestamp (YYYYMMDD-HHMMSS)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+
+    # Format: {span}-{timestamp}_{identifier}
+    # Underscore before identifier (consistent with sub-session agent names)
+    return f"{span_id}-{timestamp}_recipe"
 
 
 def get_project_slug(project_path: Path) -> str:
