@@ -1,0 +1,12 @@
+name: "minimal-test"
+description: "Minimal recipe for testing basic execution"
+version: "1.0.0"
+
+context:
+  message: "Hello from recipes!"
+
+steps:
+  - id: "test-step"
+    agent: "test-analyzer"
+    prompt: "Simply respond with: Received message: {{message}}"
+    timeout: 60

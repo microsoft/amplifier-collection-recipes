@@ -18,7 +18,7 @@ context:
 steps:
   # Critical step: Must succeed or recipe fails
   - id: "critical-validation"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ANALYZE"
     prompt: |
       Validate {{input_data}} is valid and ready for processing.
@@ -35,7 +35,7 @@ steps:
 
   # Risky step: External operation with retry
   - id: "fetch-external-data"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     prompt: |
       Fetch additional data needed for processing.
 
@@ -50,7 +50,7 @@ steps:
 
   # Optional enhancement: Continue even if fails
   - id: "optional-enhancement"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ARCHITECT"
     prompt: |
       Enhance results with additional analysis.
@@ -64,7 +64,7 @@ steps:
 
   # Process with whatever we have
   - id: "process-results"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ANALYZE"
     prompt: |
       Process results:

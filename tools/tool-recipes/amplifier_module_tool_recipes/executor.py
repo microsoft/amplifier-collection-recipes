@@ -6,7 +6,8 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .models import Recipe, Step
+from .models import Recipe
+from .models import Step
 from .session import SessionManager
 
 
@@ -116,7 +117,7 @@ class RecipeExecutor:
                     # Skip remaining steps
                     break
 
-        except Exception as e:
+        except Exception:
             # Save state even on error for resumption
             if "state" in locals():
                 self.session_manager.save_state(session_id, project_path, state)
@@ -163,9 +164,9 @@ class RecipeExecutor:
                     # Handle based on on_error strategy
                     if step.on_error == "fail":
                         raise
-                    elif step.on_error == "continue":
+                    if step.on_error == "continue":
                         return None  # Continue with None result
-                    elif step.on_error == "skip_remaining":
+                    if step.on_error == "skip_remaining":
                         raise SkipRemainingError() from e
 
                 # Wait before retry
@@ -177,7 +178,7 @@ class RecipeExecutor:
                 # Linear backoff keeps same delay
 
         # Shouldn't reach here, but handle just in case
-        if step.on_error == "fail":
+        if step.on_error == "fail" and last_error:
             raise last_error
         return None
 
@@ -192,25 +193,29 @@ class RecipeExecutor:
         Returns:
             Step result from agent
         """
+        # Import spawn helper from app layer
+        from amplifier_app_cli.session_spawner import spawn_sub_session
+
         # Substitute variables in prompt
-        prompt = self.substitute_variables(step.prompt, context)
+        instruction = self.substitute_variables(step.prompt, context)
 
-        # Build agent spawn parameters
-        agent_params = {"prompt": prompt}
-
-        # Add mode if specified (via context injection)
+        # Add mode if specified
         if step.mode:
             mode_instruction = f"MODE: {step.mode}\n\n"
-            agent_params["prompt"] = mode_instruction + prompt
+            instruction = mode_instruction + instruction
 
-        # Add agent config overrides if specified
-        if step.agent_config:
-            agent_params["config"] = step.agent_config
+        # Get parent session and agents config from coordinator
+        parent_session = self.coordinator.session
+        agents = self.coordinator.config.get("agents", {})
 
-        # Spawn sub-agent via coordinator
-        # Note: Actual coordinator.spawn_agent API may differ
-        # This follows the pattern from planning docs
-        result = await self.coordinator.spawn_agent(agent_name=step.agent, **agent_params)
+        # Spawn sub-session with agent
+        result = await spawn_sub_session(
+            agent_name=step.agent,
+            instruction=instruction,
+            parent_session=parent_session,
+            agent_configs=agents,
+            sub_session_id=None,  # Let spawner generate ID
+        )
 
         return result
 

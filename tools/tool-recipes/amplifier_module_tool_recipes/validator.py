@@ -115,6 +115,10 @@ def check_agent_availability(recipe: Recipe, coordinator: Any) -> list[str]:
         if callable(available_agents):
             available_agents = available_agents()
 
+        # Type guard for available_agents
+        if not isinstance(available_agents, list | set | dict):
+            return warnings
+
         for step in recipe.steps:
             if step.agent not in available_agents:
                 warnings.append(

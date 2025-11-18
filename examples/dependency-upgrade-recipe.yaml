@@ -45,7 +45,7 @@ steps:
     timeout: 600
 
   - id: "plan-upgrade-strategy"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ARCHITECT"
     prompt: |
       Based on this dependency audit: {{dependency_audit}}

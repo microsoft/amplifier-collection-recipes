@@ -21,7 +21,7 @@ context:
 
 steps:
   - id: "analyze-structure"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ANALYZE"
     prompt: |
       Analyze the code structure in {{file_path}}:
@@ -36,7 +36,7 @@ steps:
     timeout: 600
 
   - id: "identify-issues"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ANALYZE"
     prompt: |
       Based on this analysis: {{structure_analysis}}
@@ -59,7 +59,7 @@ steps:
     timeout: 600
 
   - id: "suggest-improvements"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ARCHITECT"
     prompt: |
       Given this analysis: {{structure_analysis}}
@@ -83,7 +83,7 @@ steps:
     timeout: 600
 
   - id: "validate-suggestions"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "REVIEW"
     prompt: |
       Review these improvement suggestions: {{improvement_suggestions}}

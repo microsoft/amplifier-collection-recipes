@@ -17,7 +17,7 @@ context:
 
 steps:
   - id: "extract-summary"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ANALYZE"
     prompt: |
       Read {{file_path}} and extract a 3-sentence summary.
@@ -25,7 +25,7 @@ steps:
     timeout: 300
 
   - id: "identify-key-points"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ANALYZE"
     prompt: |
       Based on this summary: {{summary}}
@@ -35,7 +35,7 @@ steps:
     timeout: 300
 
   - id: "generate-report"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ANALYZE"
     prompt: |
       Create a brief analysis report:

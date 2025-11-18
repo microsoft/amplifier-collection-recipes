@@ -22,7 +22,7 @@ context:
 
 steps:
   - id: "analyze-code-structure"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ANALYZE"
     prompt: |
       Analyze {{file_path}} for test generation:

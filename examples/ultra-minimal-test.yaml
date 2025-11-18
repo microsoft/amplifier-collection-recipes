@@ -1,0 +1,12 @@
+name: "ultra-minimal-test"
+description: "Ultra minimal test using recipe-author agent"
+version: "1.0.0"
+
+context:
+  task: "Say hello"
+
+steps:
+  - id: "hello"
+    agent: "recipe-author"
+    prompt: "Task: {{task}}. Just respond with a simple greeting."
+    timeout: 60

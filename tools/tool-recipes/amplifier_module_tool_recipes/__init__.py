@@ -1,34 +1,26 @@
 """Amplifier tool-recipes module - Execute multi-step AI agent recipes."""
 
+import logging
 from pathlib import Path
 from typing import Any
 
+from amplifier_core import ModuleCoordinator, ToolResult
+
 from .executor import RecipeExecutor
-from .models import Recipe, Step
+from .models import Recipe
 from .session import SessionManager
-from .validator import ValidationResult, validate_recipe
+from .validator import validate_recipe
 
-__all__ = [
-    "mount",
-    "Recipe",
-    "Step",
-    "RecipeExecutor",
-    "SessionManager",
-    "validate_recipe",
-    "ValidationResult",
-]
+logger = logging.getLogger(__name__)
 
 
-async def mount(coordinator: Any, config: dict[str, Any] | None = None) -> "RecipesTool":
+async def mount(coordinator: ModuleCoordinator, config: dict[str, Any] | None = None):
     """
     Mount tool-recipes module.
 
     Args:
         coordinator: Amplifier coordinator
         config: Optional tool configuration
-
-    Returns:
-        RecipesTool instance
     """
     config = config or {}
 
@@ -40,17 +32,24 @@ async def mount(coordinator: Any, config: dict[str, Any] | None = None) -> "Reci
     # Initialize executor
     executor = RecipeExecutor(coordinator, session_manager)
 
-    # Create and return tool instance
+    # Create tool instance
     tool = RecipesTool(executor, session_manager, coordinator, config)
 
-    return tool
+    # Register tool in mount_points
+    coordinator.mount_points["tools"][tool.name] = tool
+
+    logger.info("Mounted tool-recipes")
 
 
 class RecipesTool:
     """Tool for executing, resuming, and managing recipe workflows."""
 
     def __init__(
-        self, executor: RecipeExecutor, session_manager: SessionManager, coordinator: Any, config: dict[str, Any]
+        self,
+        executor: RecipeExecutor,
+        session_manager: SessionManager,
+        coordinator: ModuleCoordinator,
+        config: dict[str, Any],
     ):
         """Initialize tool."""
         self.executor = executor
@@ -58,171 +57,230 @@ class RecipesTool:
         self.coordinator = coordinator
         self.config = config
 
-    def get_schemas(self) -> list[dict[str, Any]]:
-        """Return tool schemas for all operations."""
-        return [
-            {
-                "name": "recipe_execute",
-                "description": "Execute a recipe from YAML file",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "recipe_path": {
-                            "type": "string",
-                            "description": "Path to recipe YAML file",
-                        },
-                        "context": {
-                            "type": "object",
-                            "description": "Context variables for recipe execution",
-                        },
-                    },
-                    "required": ["recipe_path"],
-                },
-            },
-            {
-                "name": "recipe_resume",
-                "description": "Resume interrupted recipe session",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "session_id": {
-                            "type": "string",
-                            "description": "Session ID to resume",
-                        },
-                    },
-                    "required": ["session_id"],
-                },
-            },
-            {
-                "name": "recipe_list",
-                "description": "List active recipe sessions",
-                "parameters": {
-                    "type": "object",
-                    "properties": {},
-                },
-            },
-            {
-                "name": "recipe_validate",
-                "description": "Validate recipe YAML without executing",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "recipe_path": {
-                            "type": "string",
-                            "description": "Path to recipe YAML file to validate",
-                        },
-                    },
-                    "required": ["recipe_path"],
-                },
-            },
-        ]
+    @property
+    def name(self) -> str:
+        return "recipes"
 
-    async def execute(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    @property
+    def description(self) -> str:
+        return """Execute multi-step AI agent recipes (workflows).
+
+Recipes are declarative YAML specifications that define multi-step agent workflows with:
+- Sequential execution with state persistence
+- Agent delegation with context accumulation
+- Automatic checkpointing for resumability
+- Error handling and retry logic
+
+Operations:
+- execute: Run a recipe from YAML file
+- resume: Resume interrupted session
+- list: List active sessions
+- validate: Validate recipe structure
+
+Example:
+  Execute recipe: {{"operation": "execute", "recipe_path": "examples/code-review.yaml", "context": {{"file_path": "src/auth.py"}}}}
+  Resume session: {{"operation": "resume", "session_id": "recipe_20251118_143022_a3f2"}}
+  List sessions: {{"operation": "list"}}
+  Validate recipe: {{"operation": "validate", "recipe_path": "my-recipe.yaml"}}"""
+
+    @property
+    def input_schema(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "operation": {
+                    "type": "string",
+                    "enum": ["execute", "resume", "list", "validate"],
+                    "description": "Operation to perform: execute recipe, resume session, list sessions, or validate recipe",
+                },
+                "recipe_path": {
+                    "type": "string",
+                    "description": "Path to recipe YAML file (required for 'execute' and 'validate' operations)",
+                },
+                "context": {
+                    "type": "object",
+                    "description": "Context variables for recipe execution (for 'execute' operation)",
+                },
+                "session_id": {
+                    "type": "string",
+                    "description": "Session ID to resume (required for 'resume' operation)",
+                },
+            },
+            "required": ["operation"],
+        }
+
+    async def execute(self, input: dict[str, Any]) -> ToolResult:
         """
         Execute tool operation.
 
         Args:
-            tool_name: Name of tool operation
-            arguments: Tool arguments
+            input: Tool input with 'operation' field
 
         Returns:
-            Tool result dict
+            ToolResult with operation results
         """
-        if tool_name == "recipe_execute":
-            return await self._execute_recipe(arguments)
-        elif tool_name == "recipe_resume":
-            return await self._resume_recipe(arguments)
-        elif tool_name == "recipe_list":
-            return await self._list_sessions(arguments)
-        elif tool_name == "recipe_validate":
-            return await self._validate_recipe(arguments)
-        else:
-            raise ValueError(f"Unknown tool operation: {tool_name}")
+        operation = input.get("operation")
 
-    async def _execute_recipe(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        try:
+            if operation == "execute":
+                return await self._execute_recipe(input)
+            elif operation == "resume":
+                return await self._resume_recipe(input)
+            elif operation == "list":
+                return await self._list_sessions(input)
+            elif operation == "validate":
+                return await self._validate_recipe(input)
+            else:
+                return ToolResult(
+                    success=False,
+                    error={"message": f"Unknown operation: {operation}"},
+                )
+        except Exception as e:
+            logger.error(f"Recipe tool error: {e}", exc_info=True)
+            return ToolResult(
+                success=False,
+                error={"message": str(e), "type": type(e).__name__},
+            )
+
+    async def _execute_recipe(self, input: dict[str, Any]) -> ToolResult:
         """Execute recipe from YAML file."""
-        recipe_path = Path(arguments["recipe_path"])
-        context_vars = arguments.get("context", {})
+        recipe_path_str = input.get("recipe_path")
+        if not recipe_path_str:
+            return ToolResult(success=False, error={"message": "recipe_path is required for execute operation"})
+
+        recipe_path = Path(recipe_path_str)
+        context_vars = input.get("context", {})
 
         # Determine project path (current working directory)
         project_path = Path.cwd()
 
         # Load recipe
-        recipe = Recipe.from_yaml(recipe_path)
+        try:
+            recipe = Recipe.from_yaml(recipe_path)
+        except Exception as e:
+            return ToolResult(success=False, error={"message": f"Failed to load recipe: {str(e)}"})
 
         # Validate recipe
         validation = validate_recipe(recipe, self.coordinator)
         if not validation.is_valid:
-            return {
-                "status": "error",
-                "message": "Recipe validation failed",
-                "errors": validation.errors,
-                "warnings": validation.warnings,
-            }
+            return ToolResult(
+                success=False,
+                error={
+                    "message": "Recipe validation failed",
+                    "errors": validation.errors,
+                    "warnings": validation.warnings,
+                },
+            )
 
         # Execute recipe
-        final_context = await self.executor.execute_recipe(recipe, context_vars, project_path, recipe_path=recipe_path)
+        try:
+            final_context = await self.executor.execute_recipe(recipe, context_vars, project_path)
 
-        return {
-            "status": "success",
-            "message": f"Recipe '{recipe.name}' completed successfully",
-            "context": final_context,
-            "session_id": final_context["session"]["id"],
-        }
+            return ToolResult(
+                success=True,
+                output={
+                    "status": "completed",
+                    "recipe": recipe.name,
+                    "session_id": final_context["session"]["id"],
+                    "context": final_context,
+                },
+            )
+        except Exception as e:
+            return ToolResult(
+                success=False,
+                error={
+                    "message": f"Recipe execution failed: {str(e)}",
+                    "type": type(e).__name__,
+                },
+            )
 
-    async def _resume_recipe(self, arguments: dict[str, Any]) -> dict[str, Any]:
+    async def _resume_recipe(self, input: dict[str, Any]) -> ToolResult:
         """Resume interrupted recipe session."""
-        session_id = arguments["session_id"]
+        session_id = input.get("session_id")
+        if not session_id:
+            return ToolResult(success=False, error={"message": "session_id is required for resume operation"})
+
         project_path = Path.cwd()
 
-        # Load session state
+        # Check session exists
         if not self.session_manager.session_exists(session_id, project_path):
-            return {
-                "status": "error",
-                "message": f"Session not found: {session_id}",
-            }
+            return ToolResult(
+                success=False,
+                error={"message": f"Session not found: {session_id}"},
+            )
 
-        state = self.session_manager.load_state(session_id, project_path)
+        # Load session state
+        try:
+            state = self.session_manager.load_state(session_id, project_path)
+        except Exception as e:
+            return ToolResult(success=False, error={"message": f"Failed to load session: {str(e)}"})
 
         # Load recipe from session
         session_dir = self.session_manager.get_session_dir(session_id, project_path)
         recipe_file = session_dir / "recipe.yaml"
 
         if not recipe_file.exists():
-            return {
-                "status": "error",
-                "message": f"Recipe file not found in session: {session_id}",
-            }
+            return ToolResult(
+                success=False,
+                error={"message": f"Recipe file not found in session: {session_id}"},
+            )
 
-        recipe = Recipe.from_yaml(recipe_file)
+        try:
+            recipe = Recipe.from_yaml(recipe_file)
+        except Exception as e:
+            return ToolResult(success=False, error={"message": f"Failed to load recipe from session: {str(e)}"})
 
         # Resume execution
-        final_context = await self.executor.execute_recipe(
-            recipe, context_vars={}, project_path=project_path, session_id=session_id
-        )
+        try:
+            final_context = await self.executor.execute_recipe(
+                recipe, context_vars={}, project_path=project_path, session_id=session_id
+            )
 
-        return {
-            "status": "success",
-            "message": f"Session '{session_id}' resumed and completed",
-            "context": final_context,
-            "session_id": session_id,
-        }
+            return ToolResult(
+                success=True,
+                output={
+                    "status": "resumed",
+                    "recipe": recipe.name,
+                    "session_id": session_id,
+                    "context": final_context,
+                },
+            )
+        except Exception as e:
+            return ToolResult(
+                success=False,
+                error={
+                    "message": f"Failed to resume recipe: {str(e)}",
+                    "type": type(e).__name__,
+                },
+            )
 
-    async def _list_sessions(self, arguments: dict[str, Any]) -> dict[str, Any]:
+    async def _list_sessions(self, input: dict[str, Any]) -> ToolResult:
         """List active recipe sessions."""
         project_path = Path.cwd()
 
-        sessions = self.session_manager.list_sessions(project_path)
+        try:
+            sessions = self.session_manager.list_sessions(project_path)
 
-        return {
-            "status": "success",
-            "sessions": sessions,
-            "count": len(sessions),
-        }
+            return ToolResult(
+                success=True,
+                output={
+                    "sessions": sessions,
+                    "count": len(sessions),
+                },
+            )
+        except Exception as e:
+            return ToolResult(
+                success=False,
+                error={"message": f"Failed to list sessions: {str(e)}"},
+            )
 
-    async def _validate_recipe(self, arguments: dict[str, Any]) -> dict[str, Any]:
+    async def _validate_recipe(self, input: dict[str, Any]) -> ToolResult:
         """Validate recipe without executing."""
-        recipe_path = Path(arguments["recipe_path"])
+        recipe_path_str = input.get("recipe_path")
+        if not recipe_path_str:
+            return ToolResult(success=False, error={"message": "recipe_path is required for validate operation"})
+
+        recipe_path = Path(recipe_path_str)
 
         try:
             # Load recipe
@@ -232,22 +290,27 @@ class RecipesTool:
             validation = validate_recipe(recipe, self.coordinator)
 
             if validation.is_valid:
-                return {
-                    "status": "success",
-                    "message": f"Recipe '{recipe.name}' is valid",
-                    "warnings": validation.warnings,
-                }
+                return ToolResult(
+                    success=True,
+                    output={
+                        "status": "valid",
+                        "recipe": recipe.name,
+                        "version": recipe.version,
+                        "warnings": validation.warnings,
+                    },
+                )
             else:
-                return {
-                    "status": "error",
-                    "message": "Recipe validation failed",
-                    "errors": validation.errors,
-                    "warnings": validation.warnings,
-                }
+                return ToolResult(
+                    success=False,
+                    error={
+                        "message": "Recipe validation failed",
+                        "errors": validation.errors,
+                        "warnings": validation.warnings,
+                    },
+                )
 
         except Exception as e:
-            return {
-                "status": "error",
-                "message": f"Failed to load recipe: {str(e)}",
-                "errors": [str(e)],
-            }
+            return ToolResult(
+                success=False,
+                error={"message": f"Failed to validate recipe: {str(e)}"},
+            )

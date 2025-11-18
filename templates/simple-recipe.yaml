@@ -15,7 +15,7 @@ context:
 steps:
   # Step 1: First action
   - id: "first-step"
-    agent: "zen-architect"  # Choose appropriate agent
+    agent: "developer-expertise:zen-architect"  # Choose appropriate agent
     mode: "ANALYZE"         # Specify mode if agent supports it
     prompt: |
       Describe what the agent should do.
@@ -29,7 +29,7 @@ steps:
 
   # Step 2: Second action using first result
   - id: "second-step"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ARCHITECT"
     prompt: |
       Based on the previous result: {{first_result}}
@@ -40,7 +40,7 @@ steps:
 
   # Step 3: Final action
   - id: "final-step"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ANALYZE"
     prompt: |
       Create final output combining:

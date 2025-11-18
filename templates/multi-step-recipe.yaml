@@ -28,7 +28,7 @@ context:
 steps:
   # Stage 1: Initial Analysis
   - id: "analyze"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ANALYZE"
     prompt: |
       Analyze {{primary_input}} for {{target}}.
@@ -47,7 +47,7 @@ steps:
 
   # Stage 2: Design Improvements
   - id: "design-improvements"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ARCHITECT"
     prompt: |
       Based on this analysis: {{analysis}}
@@ -65,7 +65,7 @@ steps:
 
   # Stage 3: Validate (optional based on context)
   - id: "validate-improvements"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "REVIEW"
     prompt: |
       Validate these improvements: {{improvements}}
@@ -85,7 +85,7 @@ steps:
 
   # Stage 4: Synthesize Results
   - id: "synthesize"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ANALYZE"
     agent_config:
       # Override agent settings for this step

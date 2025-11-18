@@ -56,7 +56,7 @@ steps:
     timeout: 300
 
   - id: "synthesize-findings"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ARCHITECT"
     prompt: |
       Synthesize security findings:
