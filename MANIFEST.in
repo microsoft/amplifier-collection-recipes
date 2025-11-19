@@ -8,12 +8,14 @@ include pyproject.toml
 
 # Collection resources
 recursive-include agents *
+recursive-include profiles *
 recursive-include examples *
 recursive-include templates *
 recursive-include docs *
 recursive-include modules *
 recursive-include amplifier_collection_recipes *.py *.toml
 graft agents
+graft profiles
 graft examples
 graft templates
 graft docs
