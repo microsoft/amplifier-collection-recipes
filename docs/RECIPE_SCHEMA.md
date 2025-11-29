@@ -8,7 +8,7 @@ This document defines the complete schema for recipe YAML files. Every field, co
 
 Recipes are declarative YAML specifications that define multi-step agent workflows. The tool-recipes module parses and executes these specifications.
 
-**Schema Version:** 1.2.0
+**Schema Version:** 1.3.0
 
 ## Top-Level Structure
 
@@ -21,6 +21,7 @@ created: ISO8601 datetime       # Optional
 updated: ISO8601 datetime       # Optional
 tags: list[string]             # Optional
 context: dict                   # Optional - Initial context variables
+recursion: RecursionConfig      # Optional - Recursion protection limits
 steps: list[Step]              # Required - At least one step
 ```
 
@@ -143,6 +144,40 @@ steps:
     prompt: "Analyze {{project_name}} for Python {{target_version}} compatibility"
 ```
 
+#### `recursion` (optional)
+
+**Type:** RecursionConfig object
+**Purpose:** Configure recursion protection limits for recipe composition.
+
+**Structure:**
+```yaml
+recursion:
+  max_depth: integer      # Default: 5, range: 1-20
+  max_total_steps: integer # Default: 100, range: 1-1000
+```
+
+**Fields:**
+- `max_depth`: Maximum nesting depth for recipe-calling-recipe chains. Prevents infinite recursion.
+- `max_total_steps`: Maximum total steps across all nested recipe executions. Prevents runaway workflows.
+
+**Examples:**
+```yaml
+# Allow deeper nesting for complex orchestration
+recursion:
+  max_depth: 10
+  max_total_steps: 200
+
+# Strict limits for controlled workflows
+recursion:
+  max_depth: 3
+  max_total_steps: 50
+```
+
+**Behavior:**
+- Limits apply to entire recipe execution tree
+- Exceeding limits raises error immediately
+- Child recipes inherit limits unless overridden at step level
+
 #### `steps` (required)
 
 **Type:** list of Step objects
@@ -157,13 +192,22 @@ steps:
 
 ## Step Object
 
-Each step represents one agent invocation in the workflow.
+Each step represents one unit of work in the workflow. Steps can be agent invocations (default) or recipe compositions.
 
 ```yaml
 - id: string                    # Required - Unique within recipe
-  agent: string                 # Required - Agent name or sub-agent config
+  type: string                  # Optional - "agent" (default) or "recipe"
+
+  # For agent steps (type: "agent"):
+  agent: string                 # Required for agent steps - Agent name
   mode: string                  # Optional - Agent mode (if agent supports)
-  prompt: string                # Required - Prompt template with variables
+  prompt: string                # Required for agent steps - Prompt template
+
+  # For recipe steps (type: "recipe"):
+  recipe: string                # Required for recipe steps - Path to sub-recipe
+  context: dict                 # Optional - Context to pass to sub-recipe
+
+  # Common fields:
   condition: string             # Optional - Expression that must evaluate to true
   foreach: string               # Optional - Variable containing list to iterate
   as: string                    # Optional - Loop variable name (default: "item")
@@ -196,7 +240,40 @@ Each step represents one agent invocation in the workflow.
 - id: "validate-results"
 ```
 
-#### `agent` (required)
+#### `type` (optional)
+
+**Type:** string
+**Values:** `"agent"` (default), `"recipe"`
+**Purpose:** Specify whether this step invokes an agent or another recipe.
+
+**Examples:**
+```yaml
+# Default: agent step
+- id: "analyze"
+  agent: "zen-architect"
+  prompt: "Analyze the code"
+
+# Explicit agent step
+- id: "review"
+  type: "agent"
+  agent: "code-reviewer"
+  prompt: "Review the implementation"
+
+# Recipe step (sub-workflow)
+- id: "security-audit"
+  type: "recipe"
+  recipe: "security-audit.yaml"
+  context:
+    target: "{{file_path}}"
+```
+
+**Behavior:**
+- `"agent"` (default): Step executes an agent with a prompt
+- `"recipe"`: Step executes another recipe as a sub-workflow
+
+See [Recipe Composition](#recipe-composition) for complete details on recipe steps.
+
+#### `agent` (required for agent steps)
 
 **Type:** string (agent name)
 **Purpose:** Specify which agent to spawn for this step.
@@ -218,6 +295,82 @@ Each step represents one agent invocation in the workflow.
 - Agent must be available when recipe executes
 - Tool checks agent availability before starting recipe
 - Fails fast if agent not found
+
+#### `recipe` (required for recipe steps)
+
+**Type:** string (recipe path)
+**Purpose:** Specify which recipe to execute as a sub-workflow.
+
+**Path resolution:**
+- Relative paths resolved from current recipe's directory
+- Absolute paths used as-is
+- Recipe must exist and be valid
+
+**Examples:**
+```yaml
+# Relative path (same directory)
+- id: "security-check"
+  type: "recipe"
+  recipe: "security-audit.yaml"
+
+# Relative path (subdirectory)
+- id: "lint-check"
+  type: "recipe"
+  recipe: "checks/linting.yaml"
+
+# Parent directory
+- id: "shared-validation"
+  type: "recipe"
+  recipe: "../shared/validation.yaml"
+```
+
+**Validation:**
+- Recipe file must exist
+- Recipe must be valid (passes schema validation)
+- Circular references prevented via recursion tracking
+
+#### `context` (optional, for recipe steps)
+
+**Type:** dictionary (string keys, any values)
+**Purpose:** Pass context variables to the sub-recipe.
+
+**Key feature:** Context isolation - sub-recipes receive ONLY the variables explicitly passed, not the parent's entire context. This prevents context poisoning and ensures predictable behavior.
+
+**Examples:**
+```yaml
+# Pass specific variables
+- id: "security-audit"
+  type: "recipe"
+  recipe: "security-audit.yaml"
+  context:
+    target_file: "{{file_path}}"
+    severity_threshold: "high"
+
+# Pass computed values
+- id: "detailed-analysis"
+  type: "recipe"
+  recipe: "analysis.yaml"
+  context:
+    files: "{{discovered_files}}"
+    previous_results: "{{initial_scan}}"
+
+# No context (sub-recipe uses only its own defaults)
+- id: "standalone-check"
+  type: "recipe"
+  recipe: "standalone.yaml"
+```
+
+**Behavior:**
+- Variables use template syntax: `{{variable_name}}`
+- Sub-recipe's `context` dict is REPLACED with passed context
+- Sub-recipe's outputs available via step's `output` field
+- Empty context dict `{}` passes nothing (sub-recipe uses defaults)
+
+**Why context isolation?**
+- Prevents accidental variable leakage
+- Makes sub-recipes predictable and testable
+- Enables recipe reuse across different contexts
+- Follows principle of least privilege
 
 #### `mode` (optional)
 
@@ -1006,6 +1159,212 @@ These features may be added based on real usage needs:
 
 ---
 
+## Recipe Composition
+
+Recipe composition allows recipes to invoke other recipes as sub-workflows. This enables modular, reusable workflow components.
+
+### Basic Syntax
+
+```yaml
+- id: "run-sub-recipe"
+  type: "recipe"
+  recipe: "path/to/sub-recipe.yaml"
+  context:
+    variable_name: "{{parent_variable}}"
+  output: "sub_result"
+```
+
+### How It Works
+
+1. **Parent recipe** encounters a `type: "recipe"` step
+2. **Context is prepared** - Only explicitly passed variables are included
+3. **Sub-recipe loads** - Recipe file is parsed and validated
+4. **Sub-recipe executes** - Runs with isolated context
+5. **Results return** - Sub-recipe's final context becomes the step's output
+6. **Parent continues** - Output available via `output` variable
+
+### Context Isolation
+
+**Critical design principle:** Sub-recipes receive ONLY the context explicitly passed to them.
+
+```yaml
+# Parent recipe
+context:
+  file_path: "src/auth.py"
+  api_key: "secret-123"      # Sensitive - should NOT leak
+
+steps:
+  - id: "security-audit"
+    type: "recipe"
+    recipe: "security-audit.yaml"
+    context:
+      target: "{{file_path}}"  # Only this is passed
+    output: "audit_result"
+    # api_key is NOT available to sub-recipe
+```
+
+**Why context isolation?**
+- Prevents accidental exposure of sensitive data
+- Makes sub-recipes predictable (same inputs → same outputs)
+- Enables testing sub-recipes in isolation
+- Follows security principle of least privilege
+
+### Recursion Protection
+
+Recipe composition includes built-in protection against runaway recursion.
+
+**Limits (configurable via `recursion` field):**
+- `max_depth`: Maximum nesting depth (default: 5, range: 1-20)
+- `max_total_steps`: Maximum steps across all recipes (default: 100, range: 1-1000)
+
+**Example configuration:**
+```yaml
+name: "orchestrator"
+recursion:
+  max_depth: 10        # Allow deep nesting
+  max_total_steps: 200 # Allow more total steps
+```
+
+**Step-level override:**
+```yaml
+- id: "deep-analysis"
+  type: "recipe"
+  recipe: "analysis.yaml"
+  recursion:
+    max_depth: 3  # Override for this specific invocation
+```
+
+**Error on limit exceeded:**
+```
+RecursionError: Recipe recursion depth 6 exceeds limit 5.
+Recipe stack: main.yaml → sub1.yaml → sub2.yaml → sub3.yaml → sub4.yaml → sub5.yaml
+```
+
+### Complete Example
+
+**Main recipe (code-review.yaml):**
+```yaml
+name: "comprehensive-code-review"
+description: "Multi-stage review with reusable sub-recipes"
+version: "1.0.0"
+
+context:
+  file_path: ""
+
+recursion:
+  max_depth: 5
+  max_total_steps: 150
+
+steps:
+  - id: "security-audit"
+    type: "recipe"
+    recipe: "audits/security-audit.yaml"
+    context:
+      target_file: "{{file_path}}"
+      severity_threshold: "high"
+    output: "security_findings"
+
+  - id: "performance-audit"
+    type: "recipe"
+    recipe: "audits/performance-audit.yaml"
+    context:
+      target_file: "{{file_path}}"
+    output: "performance_findings"
+
+  - id: "synthesize"
+    agent: "zen-architect"
+    prompt: |
+      Synthesize findings:
+      Security: {{security_findings}}
+      Performance: {{performance_findings}}
+    output: "final_report"
+```
+
+**Sub-recipe (audits/security-audit.yaml):**
+```yaml
+name: "security-audit"
+description: "Focused security analysis"
+version: "1.0.0"
+
+context:
+  target_file: ""
+  severity_threshold: "medium"
+
+steps:
+  - id: "scan"
+    agent: "security-guardian"
+    prompt: "Scan {{target_file}} for vulnerabilities at {{severity_threshold}} severity"
+    output: "scan_results"
+
+  - id: "classify"
+    agent: "security-guardian"
+    prompt: "Classify findings: {{scan_results}}"
+    output: "classified_findings"
+```
+
+### Interaction with Other Features
+
+**With conditions:**
+```yaml
+- id: "optional-deep-scan"
+  condition: "{{needs_deep_scan}} == 'true'"
+  type: "recipe"
+  recipe: "deep-scan.yaml"
+  context:
+    target: "{{file_path}}"
+```
+
+**With foreach:**
+```yaml
+- id: "audit-each-file"
+  foreach: "{{files}}"
+  as: "current_file"
+  type: "recipe"
+  recipe: "single-file-audit.yaml"
+  context:
+    file: "{{current_file}}"
+  collect: "all_audits"
+```
+
+**With parallel:**
+```yaml
+- id: "parallel-audits"
+  foreach: "{{audit_types}}"
+  as: "audit_type"
+  parallel: true
+  type: "recipe"
+  recipe: "{{audit_type}}-audit.yaml"
+  context:
+    target: "{{file_path}}"
+  collect: "audit_results"
+```
+
+### Error Handling
+
+Sub-recipe errors propagate to the parent:
+- If a step in sub-recipe fails, the sub-recipe step fails
+- Parent recipe's error handling applies (`on_error` field)
+- Error messages include the recipe stack for debugging
+
+```yaml
+- id: "risky-audit"
+  type: "recipe"
+  recipe: "experimental-audit.yaml"
+  context:
+    target: "{{file_path}}"
+  on_error: "continue"  # Don't fail parent if sub-recipe fails
+```
+
+### Best Practices
+
+1. **Keep sub-recipes focused** - Single responsibility, reusable
+2. **Document context requirements** - Clear about what variables are expected
+3. **Use meaningful outputs** - Name outputs descriptively
+4. **Set appropriate limits** - Adjust recursion limits based on workflow needs
+5. **Test sub-recipes independently** - Each should work on its own
+
+---
+
 ## Validation Rules
 
 The tool-recipes module validates recipes before execution:
@@ -1125,6 +1484,13 @@ steps:
 ---
 
 ## Schema Change History
+
+### v1.3.0
+- Recipe composition (`type: "recipe"` steps)
+- Sub-recipe invocation with context isolation
+- Recursion protection (`recursion` config, `max_depth`, `max_total_steps`)
+- Step-level recursion overrides
+- New step fields: `type`, `recipe`, `context` (for recipe steps)
 
 ### v1.2.0
 - Parallel iteration (`parallel: true` on foreach steps)

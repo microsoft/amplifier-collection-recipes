@@ -1,0 +1,137 @@
+name: "comprehensive-review"
+description: "Combined code quality and security analysis using recipe composition"
+version: "1.0.0"
+author: "Amplifier Recipes Collection"
+tags: ["code-review", "security", "composition", "analysis"]
+
+# This recipe demonstrates RECIPE COMPOSITION - invoking other recipes as sub-workflows.
+#
+# Instead of duplicating steps from code-review and security-audit recipes,
+# we invoke them as sub-recipes with isolated context. This enables:
+# - Modular, reusable workflow components
+# - Independent testing of each sub-recipe
+# - Consistent behavior (sub-recipes are the same as standalone)
+# - DRY principle (Don't Repeat Yourself)
+#
+# The composition pattern:
+# 1. code-review-recipe.yaml runs with file_path context
+# 2. security-audit-recipe.yaml runs with file_path + severity context
+# 3. Results from both are synthesized into unified report
+#
+# Context Isolation: Sub-recipes receive ONLY the context explicitly passed.
+# The parent's full context is NOT leaked to sub-recipes.
+#
+# Recursion Protection: max_depth and max_total_steps prevent runaway nesting.
+#
+# Usage:
+#   amplifier run "execute comprehensive-review.yaml with file_path=src/auth.py"
+#
+# Required agents: zen-architect, security-guardian (via sub-recipes)
+# Typical runtime: 5-15 minutes (depends on code complexity)
+
+context:
+  file_path: ""                    # Required: path to code file to review
+  security_severity: "medium"      # Optional: minimum security severity
+
+recursion:
+  max_depth: 3                     # Allow sub-recipes to call sub-recipes if needed
+  max_total_steps: 50              # Total steps across all recipes
+
+steps:
+  # Step 1: Run the full code review workflow as a sub-recipe
+  # This executes all steps in code-review-recipe.yaml:
+  # - analyze-structure
+  # - identify-issues
+  # - assess-severity
+  # - suggest-improvements (conditional)
+  # - validate-suggestions (conditional)
+  # - quick-approval (conditional)
+  - id: "code-review"
+    type: "recipe"
+    recipe: "code-review-recipe.yaml"
+    context:
+      file_path: "{{file_path}}"
+    output: "code_review_results"
+    timeout: 900  # 15 minutes for full code review
+
+  # Step 2: Run the security audit workflow as a sub-recipe
+  # This executes all steps in security-audit-recipe.yaml:
+  # - vulnerability-scan
+  # - configuration-review
+  # - dependency-audit
+  # - synthesize-findings
+  - id: "security-audit"
+    type: "recipe"
+    recipe: "security-audit-recipe.yaml"
+    context:
+      file_path: "{{file_path}}"
+      severity_threshold: "{{security_severity}}"
+    output: "security_results"
+    timeout: 900  # 15 minutes for security audit
+
+  # Step 3: Synthesize results from both sub-recipes
+  # This step has access to outputs from both sub-recipes
+  - id: "synthesize-comprehensive"
+    agent: "developer-expertise:zen-architect"
+    mode: "ARCHITECT"
+    prompt: |
+      Create a comprehensive review report combining code quality and security findings.
+
+      ## Code Review Results
+      {{code_review_results}}
+
+      ## Security Audit Results
+      {{security_results}}
+
+      ## Your Task
+
+      Synthesize these findings into a unified, prioritized action plan:
+
+      1. **Critical Items** (address immediately)
+         - Security vulnerabilities that could be exploited
+         - Bugs that cause incorrect behavior
+         - Critical design flaws
+
+      2. **High Priority** (address soon)
+         - Security configuration issues
+         - Significant code quality problems
+         - Maintainability concerns
+
+      3. **Medium Priority** (address when convenient)
+         - Code improvements
+         - Minor security hardening
+         - Refactoring opportunities
+
+      4. **Low Priority** (nice to have)
+         - Style improvements
+         - Documentation
+         - Optional enhancements
+
+      For each item:
+      - Source (code review or security audit)
+      - Specific location in code
+      - What to do
+      - Estimated effort (quick/moderate/significant)
+
+      Focus on actionable items. Skip anything already covered in both reports.
+      Highlight any conflicts between code quality and security recommendations.
+    output: "comprehensive_report"
+    timeout: 300
+
+# Output structure:
+#
+# code_review_results: Full context from code-review-recipe.yaml including:
+#   - structure_analysis
+#   - identified_issues
+#   - severity
+#   - improvement_suggestions (if issues found)
+#   - validated_suggestions (if high/critical)
+#   - approval_summary (if clean)
+#
+# security_results: Full context from security-audit-recipe.yaml including:
+#   - vulnerability_findings
+#   - configuration_issues
+#   - dependency_vulnerabilities
+#   - remediation_plan
+#
+# comprehensive_report: Unified, prioritized action plan

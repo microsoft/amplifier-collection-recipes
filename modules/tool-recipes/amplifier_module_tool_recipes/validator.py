@@ -73,19 +73,56 @@ def check_variable_references(recipe: Recipe) -> list[str]:
             loop_var = step.as_var or "item"
             step_local_vars.add(loop_var)
 
-        # Check prompt variables
-        prompt_vars = extract_variables(step.prompt)
-        for var in prompt_vars:
-            # Check if it's a nested reference (recipe.name, session.id, etc.)
-            if "." in var:
-                prefix = var.split(".")[0]
-                if prefix not in reserved:
-                    errors.append(f"Step '{step.id}': Variable {{{{{var}}}}} references unknown namespace '{prefix}'")
-            elif var not in available and var not in step_local_vars:
-                errors.append(
-                    f"Step '{step.id}': Variable {{{{{var}}}}} is not defined. "
-                    f"Available variables: {', '.join(sorted(available | step_local_vars))}"
-                )
+        # Check prompt variables (agent steps only - recipe steps have no prompt)
+        if step.prompt:
+            prompt_vars = extract_variables(step.prompt)
+            for var in prompt_vars:
+                # Check if it's a nested reference (recipe.name, session.id, etc.)
+                if "." in var:
+                    prefix = var.split(".")[0]
+                    if prefix not in reserved:
+                        errors.append(
+                            f"Step '{step.id}': Variable {{{{{var}}}}} references unknown namespace '{prefix}'"
+                        )
+                elif var not in available and var not in step_local_vars:
+                    errors.append(
+                        f"Step '{step.id}': Variable {{{{{var}}}}} is not defined. "
+                        f"Available variables: {', '.join(sorted(available | step_local_vars))}"
+                    )
+
+        # Check recipe step context variables (recipe steps only)
+        if step.step_context:
+            for key, value in step.step_context.items():
+                if isinstance(value, str):
+                    context_vars = extract_variables(value)
+                    for var in context_vars:
+                        if "." in var:
+                            prefix = var.split(".")[0]
+                            if prefix not in reserved:
+                                errors.append(
+                                    f"Step '{step.id}': Context key '{key}' variable {{{{{var}}}}} references unknown namespace '{prefix}'"
+                                )
+                        elif var not in available and var not in step_local_vars:
+                            errors.append(
+                                f"Step '{step.id}': Context key '{key}' variable {{{{{var}}}}} is not defined. "
+                                f"Available variables: {', '.join(sorted(available | step_local_vars))}"
+                            )
+
+        # Check recipe path variables (for dynamic recipe paths)
+        if step.recipe:
+            recipe_vars = extract_variables(step.recipe)
+            for var in recipe_vars:
+                if "." in var:
+                    prefix = var.split(".")[0]
+                    if prefix not in reserved:
+                        errors.append(
+                            f"Step '{step.id}': Recipe path variable {{{{{var}}}}} references unknown namespace '{prefix}'"
+                        )
+                elif var not in available and var not in step_local_vars:
+                    errors.append(
+                        f"Step '{step.id}': Recipe path variable {{{{{var}}}}} is not defined. "
+                        f"Available variables: {', '.join(sorted(available | step_local_vars))}"
+                    )
 
         # Add this step's output to available variables for next steps
         if step.output:

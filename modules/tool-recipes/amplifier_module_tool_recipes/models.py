@@ -4,8 +4,26 @@ from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
 from typing import Any
+from typing import Literal
 
 import yaml
+
+
+@dataclass
+class RecursionConfig:
+    """Recursion protection configuration for recipe composition."""
+
+    max_depth: int = 5  # Default: 5, configurable 1-20
+    max_total_steps: int = 100  # Default: 100, configurable 1-1000
+
+    def validate(self) -> list[str]:
+        """Validate recursion config."""
+        errors = []
+        if not 1 <= self.max_depth <= 20:
+            errors.append(f"recursion.max_depth must be 1-20, got {self.max_depth}")
+        if not 1 <= self.max_total_steps <= 1000:
+            errors.append(f"recursion.max_total_steps must be 1-1000, got {self.max_total_steps}")
+        return errors
 
 
 @dataclass
@@ -13,9 +31,18 @@ class Step:
     """Represents a single step in a recipe workflow."""
 
     id: str
-    agent: str
-    prompt: str
+    # Agent step fields (required when type="agent")
+    agent: str | None = None
+    prompt: str | None = None
     mode: str | None = None
+    agent_config: dict[str, Any] | None = None
+
+    # Recipe composition fields (required when type="recipe")
+    type: Literal["agent", "recipe"] = "agent"
+    recipe: str | None = None  # Path to sub-recipe file
+    step_context: dict[str, Any] | None = None  # Context to pass to sub-recipe (YAML: "context")
+
+    # Common fields
     output: str | None = None
     condition: str | None = None
     foreach: str | None = None
@@ -26,8 +53,10 @@ class Step:
     timeout: int = 600
     retry: dict[str, Any] | None = None
     on_error: str = "fail"
-    agent_config: dict[str, Any] | None = None
     depends_on: list[str] = field(default_factory=list)
+
+    # Per-step recursion override (for recipe steps only)
+    recursion: RecursionConfig | None = None
 
     def validate(self) -> list[str]:
         """Validate step structure and constraints."""
@@ -36,12 +65,37 @@ class Step:
         # Required fields
         if not self.id:
             errors.append("Step missing required field: id")
-        if not self.agent:
-            errors.append(f"Step '{self.id}': missing required field: agent")
-        if not self.prompt:
-            errors.append(f"Step '{self.id}': missing required field: prompt")
 
-        # Field constraints
+        # Type-specific validation
+        if self.type == "agent":
+            # Agent steps require agent and prompt
+            if not self.agent:
+                errors.append(f"Step '{self.id}': agent steps require 'agent' field")
+            if not self.prompt:
+                errors.append(f"Step '{self.id}': agent steps require 'prompt' field")
+            # Agent steps cannot have recipe-specific fields
+            if self.recipe:
+                errors.append(f"Step '{self.id}': agent steps cannot have 'recipe' field")
+            if self.step_context:
+                errors.append(f"Step '{self.id}': agent steps cannot have 'context' field")
+        elif self.type == "recipe":
+            # Recipe steps require recipe path
+            if not self.recipe:
+                errors.append(f"Step '{self.id}': recipe steps require 'recipe' field")
+            # Recipe steps cannot have agent-specific fields
+            if self.agent:
+                errors.append(f"Step '{self.id}': recipe steps cannot have 'agent' field")
+            if self.prompt:
+                errors.append(f"Step '{self.id}': recipe steps cannot have 'prompt' field")
+            if self.mode:
+                errors.append(f"Step '{self.id}': recipe steps cannot have 'mode' field")
+            # Validate recursion config if present
+            if self.recursion:
+                errors.extend(self.recursion.validate())
+        else:
+            errors.append(f"Step '{self.id}': type must be 'agent' or 'recipe', got '{self.type}'")
+
+        # Field constraints (common to both types)
         if self.timeout <= 0:
             errors.append(f"Step '{self.id}': timeout must be positive")
 
@@ -96,6 +150,7 @@ class Recipe:
     updated: str | None = None
     tags: list[str] = field(default_factory=list)
     context: dict[str, Any] = field(default_factory=dict)
+    recursion: RecursionConfig | None = None  # Recipe-level recursion config
 
     @classmethod
     def from_yaml(cls, path: Path) -> "Recipe":
@@ -118,11 +173,26 @@ class Recipe:
         for step_data in steps_data:
             if not isinstance(step_data, dict):
                 raise ValueError("Each step must be a dictionary")
-            # Map 'as' to 'as_var' since 'as' is Python reserved keyword
             step_data_copy = dict(step_data)
+
+            # Map 'as' to 'as_var' since 'as' is Python reserved keyword
             if "as" in step_data_copy:
                 step_data_copy["as_var"] = step_data_copy.pop("as")
+
+            # Map 'context' to 'step_context' (context at step level is for sub-recipes)
+            if "context" in step_data_copy:
+                step_data_copy["step_context"] = step_data_copy.pop("context")
+
+            # Parse step-level recursion config if present
+            if "recursion" in step_data_copy and isinstance(step_data_copy["recursion"], dict):
+                step_data_copy["recursion"] = RecursionConfig(**step_data_copy["recursion"])
+
             steps.append(Step(**step_data_copy))
+
+        # Parse recipe-level recursion config if present
+        recursion_config = None
+        if "recursion" in data and isinstance(data["recursion"], dict):
+            recursion_config = RecursionConfig(**data["recursion"])
 
         # Create recipe
         recipe = cls(
@@ -135,6 +205,7 @@ class Recipe:
             updated=data.get("updated"),
             tags=data.get("tags", []),
             context=data.get("context", {}),
+            recursion=recursion_config,
         )
 
         return recipe
@@ -198,6 +269,10 @@ class Recipe:
         for step in self.steps:
             if step.id in step.depends_on:
                 errors.append(f"Step '{step.id}': cannot depend on itself")
+
+        # Validate recipe-level recursion config
+        if self.recursion:
+            errors.extend(self.recursion.validate())
 
         return errors
 

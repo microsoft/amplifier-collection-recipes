@@ -16,6 +16,109 @@ This catalog describes all example recipes included in the collection. Each exam
 | [bug-investigation](#bug-investigation) | Debugging | 3 | ~5-10 min | bug-hunter, zen-architect |
 | [refactoring-planning](#refactoring-planning) | Architecture | 4 | ~10-15 min | zen-architect (multiple modes) |
 | [research-synthesis](#research-synthesis) | Research | 4 | ~15-25 min | zen-architect (multiple modes) |
+| [comprehensive-review](#comprehensive-review) | Code Quality | 3 | ~20-30 min | zen-architect, security-guardian |
+
+---
+
+## Comprehensive Review
+
+**File:** `examples/comprehensive-review.yaml`
+
+### Description
+
+Demonstrates recipe composition - combining code review and security audit by invoking them as sub-recipes with isolated context and recursion protection.
+
+### Use Cases
+
+- Combined code quality and security analysis
+- Modular workflow design using existing recipes
+- Unified reports from multiple analysis types
+- DRY principle (reuse existing recipes instead of duplicating steps)
+
+### Workflow
+
+```
+1. Code Review (sub-recipe)
+   → Runs code-review-recipe.yaml with file_path
+   → Returns full code review results
+
+2. Security Audit (sub-recipe)
+   → Runs security-audit-recipe.yaml with file_path and severity
+   → Returns security findings
+
+3. Synthesize Comprehensive Report
+   → Combines results from both sub-recipes
+   → Creates prioritized action plan
+```
+
+### Key Recipe Structure
+
+```yaml
+name: "comprehensive-review"
+description: "Combined code quality and security analysis using recipe composition"
+version: "1.0.0"
+
+context:
+  file_path: ""
+  security_severity: "medium"
+
+recursion:
+  max_depth: 3
+  max_total_steps: 50
+
+steps:
+  - id: "code-review"
+    type: "recipe"
+    recipe: "code-review-recipe.yaml"
+    context:
+      file_path: "{{file_path}}"
+    output: "code_review_results"
+
+  - id: "security-audit"
+    type: "recipe"
+    recipe: "security-audit-recipe.yaml"
+    context:
+      file_path: "{{file_path}}"
+      severity_threshold: "{{security_severity}}"
+    output: "security_results"
+
+  - id: "synthesize-comprehensive"
+    agent: "developer-expertise:zen-architect"
+    mode: "ARCHITECT"
+    prompt: |
+      Create comprehensive review combining:
+      Code Review: {{code_review_results}}
+      Security: {{security_results}}
+    output: "comprehensive_report"
+```
+
+### Required Context
+
+```yaml
+file_path: "path/to/code.py"  # Required
+security_severity: "medium"   # Optional, defaults to "medium"
+```
+
+### Example Usage
+
+```bash
+amplifier run "execute comprehensive-review.yaml with file_path=src/auth.py"
+```
+
+### What You'll Get
+
+- Complete code review (structure, issues, improvements)
+- Security audit results (vulnerabilities, configuration, dependencies)
+- Unified prioritized action plan (critical → low priority)
+- Conflict resolution between quality and security recommendations
+
+### Key Learnings
+
+- **Recipe composition**: Reuse existing recipes as workflow components
+- **Context isolation**: Sub-recipes receive ONLY explicitly passed context
+- **Recursion protection**: Built-in limits prevent runaway nesting
+- **Output chaining**: Sub-recipe results available to subsequent steps
+- **DRY principle**: No duplication of steps from other recipes
 
 ---
 
@@ -601,6 +704,9 @@ See [Contributing Guidelines](../CONTRIBUTING.md) for details.
 **Artifact Generation:**
 - test-generation (generates test code)
 - documentation-evolution (generates improved docs)
+
+**Recipe Composition:**
+- comprehensive-review (combines code review + security audit via sub-recipes)
 
 ---
 

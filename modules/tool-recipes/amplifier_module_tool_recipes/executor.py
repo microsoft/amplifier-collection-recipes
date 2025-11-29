@@ -3,12 +3,15 @@
 import asyncio
 import datetime
 import re
+from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
 from typing import Any
 
 from .expression_evaluator import ExpressionError
 from .expression_evaluator import evaluate_condition
 from .models import Recipe
+from .models import RecursionConfig
 from .models import Step
 from .session import SessionManager
 
@@ -17,6 +20,55 @@ class SkipRemainingError(Exception):
     """Raised when step fails with on_error='skip_remaining'."""
 
     pass
+
+
+@dataclass
+class RecursionState:
+    """Track recursion across nested recipe executions."""
+
+    current_depth: int = 0
+    total_steps: int = 0
+    max_depth: int = 5
+    max_total_steps: int = 100
+    recipe_stack: list[str] = field(default_factory=list)
+
+    def check_depth(self, recipe_name: str) -> None:
+        """Raise if depth limit exceeded."""
+        if self.current_depth >= self.max_depth:
+            raise ValueError(
+                f"Recipe recursion depth {self.current_depth} exceeds limit {self.max_depth}. "
+                f"Stack: {' -> '.join(self.recipe_stack)}"
+            )
+
+    def check_total_steps(self) -> None:
+        """Raise if total steps limit exceeded."""
+        if self.total_steps >= self.max_total_steps:
+            raise ValueError(f"Total steps {self.total_steps} exceeds limit {self.max_total_steps}")
+
+    def increment_steps(self) -> None:
+        """Increment total steps counter and check limit."""
+        self.total_steps += 1
+        self.check_total_steps()
+
+    def enter_recipe(self, recipe_name: str, override_config: RecursionConfig | None = None) -> "RecursionState":
+        """
+        Create child state for sub-recipe.
+
+        Args:
+            recipe_name: Name of recipe being entered
+            override_config: Optional per-step recursion config override
+        """
+        # Use override config if provided, otherwise inherit current limits
+        max_depth = override_config.max_depth if override_config else self.max_depth
+        max_total_steps = override_config.max_total_steps if override_config else self.max_total_steps
+
+        return RecursionState(
+            current_depth=self.current_depth + 1,
+            total_steps=self.total_steps,
+            max_depth=max_depth,
+            max_total_steps=max_total_steps,
+            recipe_stack=[*self.recipe_stack, recipe_name],
+        )
 
 
 class RecipeExecutor:
@@ -40,6 +92,7 @@ class RecipeExecutor:
         project_path: Path,
         session_id: str | None = None,
         recipe_path: Path | None = None,
+        recursion_state: RecursionState | None = None,
     ) -> dict[str, Any]:
         """
         Execute recipe with checkpointing and resumption.
@@ -50,10 +103,26 @@ class RecipeExecutor:
             project_path: Current project directory
             session_id: Optional session ID to resume
             recipe_path: Optional path to recipe file (saved to session)
+            recursion_state: Optional recursion tracking state (for nested recipes)
 
         Returns:
             Final context dict with all step outputs
         """
+        # Initialize or inherit recursion state
+        if recursion_state is None:
+            # Top-level recipe: create initial state from recipe config
+            config = recipe.recursion or RecursionConfig()
+            recursion_state = RecursionState(
+                current_depth=0,
+                total_steps=0,
+                max_depth=config.max_depth,
+                max_total_steps=config.max_total_steps,
+                recipe_stack=[recipe.name],
+            )
+        else:
+            # Sub-recipe: check depth before entering
+            recursion_state.check_depth(recipe.name)
+
         # Create or resume session
         is_resuming = session_id is not None
 
@@ -107,7 +176,7 @@ class RecipeExecutor:
                 # Handle foreach loops
                 if step.foreach:
                     try:
-                        await self._execute_loop(step, context)
+                        await self._execute_loop(step, context, project_path, recursion_state, recipe_path)
                         # Update completed steps and session state after loop completes
                         completed_steps.append(step.id)
                         state = {
@@ -125,9 +194,16 @@ class RecipeExecutor:
                     except SkipRemainingError:
                         break
 
-                # Execute step with retry
+                # Execute step based on type (agent or recipe)
                 try:
-                    result = await self.execute_step_with_retry(step, context)
+                    if step.type == "recipe":
+                        result = await self._execute_recipe_step(
+                            step, context, project_path, recursion_state, recipe_path
+                        )
+                    else:
+                        # Track step execution for recursion limits
+                        recursion_state.increment_steps()
+                        result = await self.execute_step_with_retry(step, context)
 
                     # Store output if specified
                     if step.output:
@@ -233,6 +309,10 @@ class RecipeExecutor:
         # Import spawn helper from app layer
         from amplifier_app_cli.session_spawner import spawn_sub_session
 
+        # Agent steps must have prompt and agent (validated by models)
+        if not step.prompt or not step.agent:
+            raise ValueError(f"Step '{step.id}' is an agent step but missing prompt or agent")
+
         # Substitute variables in prompt
         instruction = self.substitute_variables(step.prompt, context)
 
@@ -256,7 +336,14 @@ class RecipeExecutor:
 
         return result
 
-    async def _execute_loop(self, step: Step, context: dict[str, Any]) -> None:
+    async def _execute_loop(
+        self,
+        step: Step,
+        context: dict[str, Any],
+        project_path: Path,
+        recursion_state: RecursionState,
+        recipe_path: Path | None = None,
+    ) -> None:
         """
         Execute a step with foreach iteration.
 
@@ -269,6 +356,8 @@ class RecipeExecutor:
         Args:
             step: Step with foreach field
             context: Current context variables
+            project_path: Current project directory
+            recursion_state: Recursion tracking state
 
         Raises:
             ValueError: If foreach variable invalid or iteration fails
@@ -296,10 +385,14 @@ class RecipeExecutor:
 
         if step.parallel:
             # Parallel execution: run all iterations concurrently
-            results = await self._execute_loop_parallel(step, context, items, loop_var)
+            results = await self._execute_loop_parallel(
+                step, context, items, loop_var, project_path, recursion_state, recipe_path
+            )
         else:
             # Sequential execution: run iterations one at a time
-            results = await self._execute_loop_sequential(step, context, items, loop_var)
+            results = await self._execute_loop_sequential(
+                step, context, items, loop_var, project_path, recursion_state, recipe_path
+            )
 
         # Store results
         if step.collect:
@@ -308,7 +401,14 @@ class RecipeExecutor:
             context[step.output] = results[-1]  # Last iteration result
 
     async def _execute_loop_sequential(
-        self, step: Step, context: dict[str, Any], items: list[Any], loop_var: str
+        self,
+        step: Step,
+        context: dict[str, Any],
+        items: list[Any],
+        loop_var: str,
+        project_path: Path,
+        recursion_state: RecursionState,
+        recipe_path: Path | None = None,
     ) -> list[Any]:
         """Execute loop iterations sequentially."""
         results = []
@@ -318,7 +418,12 @@ class RecipeExecutor:
             context[loop_var] = item
 
             try:
-                result = await self.execute_step_with_retry(step, context)
+                # Execute based on step type
+                if step.type == "recipe":
+                    result = await self._execute_recipe_step(step, context, project_path, recursion_state, recipe_path)
+                else:
+                    recursion_state.increment_steps()
+                    result = await self.execute_step_with_retry(step, context)
                 results.append(result)
             except SkipRemainingError:
                 # Propagate skip_remaining
@@ -334,7 +439,14 @@ class RecipeExecutor:
         return results
 
     async def _execute_loop_parallel(
-        self, step: Step, context: dict[str, Any], items: list[Any], loop_var: str
+        self,
+        step: Step,
+        context: dict[str, Any],
+        items: list[Any],
+        loop_var: str,
+        project_path: Path,
+        recursion_state: RecursionState,
+        recipe_path: Path | None = None,
     ) -> list[Any]:
         """
         Execute loop iterations in parallel using asyncio.gather.
@@ -343,6 +455,15 @@ class RecipeExecutor:
         Results are returned in the same order as input items.
         Fail-fast: if any iteration fails, the entire step fails.
         """
+        # For agent steps, pre-check total steps limit (all will run in parallel)
+        if step.type == "agent":
+            if recursion_state.total_steps + len(items) > recursion_state.max_total_steps:
+                raise ValueError(
+                    f"Parallel loop would exceed max_total_steps "
+                    f"({recursion_state.total_steps} + {len(items)} > {recursion_state.max_total_steps})"
+                )
+            # Pre-increment for all iterations
+            recursion_state.total_steps += len(items)
 
         async def execute_iteration(idx: int, item: Any) -> Any:
             """Execute a single iteration with isolated context."""
@@ -350,6 +471,10 @@ class RecipeExecutor:
             iter_context = {**context, loop_var: item}
 
             try:
+                if step.type == "recipe":
+                    return await self._execute_recipe_step(
+                        step, iter_context, project_path, recursion_state, recipe_path
+                    )
                 return await self.execute_step_with_retry(step, iter_context)
             except SkipRemainingError:
                 raise
@@ -364,6 +489,72 @@ class RecipeExecutor:
         results = await asyncio.gather(*tasks)
 
         return list(results)
+
+    async def _execute_recipe_step(
+        self,
+        step: Step,
+        context: dict[str, Any],
+        project_path: Path,
+        recursion_state: RecursionState,
+        parent_recipe_path: Path | None = None,
+    ) -> dict[str, Any]:
+        """
+        Execute a recipe composition step by loading and running a sub-recipe.
+
+        Args:
+            step: Step with type="recipe" and recipe path
+            context: Current context variables
+            project_path: Current project directory
+            recursion_state: Recursion tracking state
+            parent_recipe_path: Path to parent recipe file (for relative resolution)
+
+        Returns:
+            Sub-recipe's final context dict
+        """
+        assert step.recipe is not None, "Recipe step must have recipe path"
+
+        # Resolve sub-recipe path relative to parent recipe's directory (not project_path)
+        # This allows recipes to reference sibling recipes naturally
+        if parent_recipe_path is not None:
+            base_dir = parent_recipe_path.parent
+        else:
+            base_dir = project_path
+
+        sub_recipe_path = base_dir / step.recipe
+        if not sub_recipe_path.exists():
+            raise FileNotFoundError(f"Sub-recipe not found: {sub_recipe_path}")
+
+        # Load sub-recipe
+        sub_recipe = Recipe.from_yaml(sub_recipe_path)
+
+        # Build sub-recipe context from step's context field (with variable substitution)
+        # Context isolation: sub-recipe gets ONLY explicitly passed context
+        sub_context: dict[str, Any] = {}
+        if step.step_context:
+            for key, value in step.step_context.items():
+                if isinstance(value, str):
+                    # Substitute variables in string values
+                    sub_context[key] = self.substitute_variables(value, context)
+                else:
+                    sub_context[key] = value
+
+        # Create child recursion state (with step-level override if present)
+        child_state = recursion_state.enter_recipe(sub_recipe.name, step.recursion)
+
+        # Execute sub-recipe recursively
+        result = await self.execute_recipe(
+            recipe=sub_recipe,
+            context_vars=sub_context,
+            project_path=project_path,
+            session_id=None,  # Sub-recipes don't get separate session files
+            recipe_path=sub_recipe_path,
+            recursion_state=child_state,
+        )
+
+        # Propagate total steps back to parent state
+        recursion_state.total_steps = child_state.total_steps
+
+        return result
 
     def _resolve_foreach_variable(self, foreach: str, context: dict[str, Any]) -> Any:
         """

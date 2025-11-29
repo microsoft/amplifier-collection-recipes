@@ -172,9 +172,11 @@ Example:
                 },
             )
 
-        # Execute recipe
+        # Execute recipe (pass recipe_path for sub-recipe resolution)
         try:
-            final_context = await self.executor.execute_recipe(recipe, context_vars, project_path)
+            final_context = await self.executor.execute_recipe(
+                recipe, context_vars, project_path, recipe_path=recipe_path
+            )
 
             return ToolResult(
                 success=True,
