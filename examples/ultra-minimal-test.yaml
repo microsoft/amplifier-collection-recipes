@@ -7,6 +7,6 @@ context:
 
 steps:
   - id: "hello"
-    agent: "recipe-author"
+    agent: "recipes:recipe-author"
     prompt: "Task: {{task}}. Just respond with a simple greeting."
     timeout: 60
