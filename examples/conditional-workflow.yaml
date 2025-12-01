@@ -19,7 +19,7 @@ context:
 steps:
   # Step 1: Classify the input data
   - id: "classify"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ANALYZE"
     prompt: |
       Classify the following input into exactly ONE category:
@@ -34,7 +34,7 @@ steps:
   # Step 2a: Simple processing path
   - id: "simple-process"
     condition: "{{classification}} == 'simple'"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     prompt: |
       Process this simple input directly:
       {{input_data}}
@@ -45,7 +45,7 @@ steps:
   # Step 2b: Complex processing - first stage
   - id: "complex-analyze"
     condition: "{{classification}} == 'complex'"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ANALYZE"
     prompt: |
       Perform detailed analysis of this complex input:
@@ -57,7 +57,7 @@ steps:
   # Step 2c: Complex processing - second stage
   - id: "complex-synthesize"
     condition: "{{classification}} == 'complex'"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     prompt: |
       Synthesize the analysis into actionable insights:
       {{detailed_analysis}}
@@ -67,7 +67,7 @@ steps:
 
   # Step 3: Generate final report (always runs)
   - id: "report"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     prompt: |
       Generate a final report summarizing:
 
