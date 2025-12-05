@@ -607,18 +607,81 @@ class RecipeExecutor:
 
         # Get parent session and agents config from coordinator
         parent_session = self.coordinator.session
-        agents = self.coordinator.config.get("agents", {})
+        agents_config = self.coordinator.config.get("agents", {})
+
+        # If agents_config is not a dict (e.g., "all" or a list of names),
+        # we need to dynamically load the agent configuration
+        if not isinstance(agents_config, dict) or step.agent not in agents_config:
+            agents_config = self._load_agent_config(step.agent, agents_config)
 
         # Spawn sub-session with agent
         result = await spawn_sub_session(
             agent_name=step.agent,
             instruction=instruction,
             parent_session=parent_session,
-            agent_configs=agents,
+            agent_configs=agents_config,
             sub_session_id=None,  # Let spawner generate ID
         )
 
         return result
+
+    def _load_agent_config(self, agent_name: str, existing_config: Any) -> dict[str, dict]:
+        """
+        Dynamically load agent configuration using the agent loader.
+
+        Args:
+            agent_name: Name of agent to load
+            existing_config: Existing agents config (may be "all", list, or dict)
+
+        Returns:
+            Dict mapping agent name to its configuration
+
+        Raises:
+            ValueError: If agent cannot be loaded
+        """
+        try:
+            from amplifier_app_cli.paths import create_agent_loader  # type: ignore[import-not-found]
+
+            agent_loader = create_agent_loader()
+            agent = agent_loader.load_agent(agent_name)
+
+            # Convert Agent to dict format expected by spawn_sub_session
+            agent_dict = {
+                "description": agent.meta.description,
+            }
+
+            # Add providers if specified
+            if agent.providers:
+                agent_dict["providers"] = [p.model_dump() for p in agent.providers]
+
+            # Add tools if specified
+            if agent.tools:
+                agent_dict["tools"] = [t.model_dump() for t in agent.tools]
+
+            # Add hooks if specified
+            if agent.hooks:
+                agent_dict["hooks"] = [h.model_dump() for h in agent.hooks]
+
+            # Add session config if specified
+            if agent.session:
+                agent_dict["session"] = agent.session
+
+            # Add system instruction if specified
+            if agent.system:
+                agent_dict["system"] = {"instruction": agent.system.instruction}
+
+            # Start with existing dict config or empty
+            result = dict(existing_config) if isinstance(existing_config, dict) else {}
+            result[agent_name] = agent_dict
+
+            return result
+
+        except ImportError as e:
+            raise ValueError(
+                f"Agent '{agent_name}' not found in configuration and agent loader not available: {e}"
+            )
+        except Exception as e:
+            raise ValueError(f"Agent '{agent_name}' not found in configuration: {e}")
 
     async def _execute_loop(
         self,
