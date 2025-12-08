@@ -45,7 +45,7 @@ description: "Does everything related to code quality"
 ✅ **Good:**
 - `security-audit.yaml` - Security scanning only
 - `performance-audit.yaml` - Performance analysis only
-- `full-audit.yaml` - Runs security-audit + performance-audit (future)
+- `full-audit.yaml` - Runs security-audit + performance-audit via recipe composition
 
 ❌ **Bad:**
 - `mega-audit.yaml` - 20 steps covering everything

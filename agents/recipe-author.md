@@ -60,6 +60,10 @@ The agent has complete knowledge of the recipe schema including:
 - Error handling options
 - **Recipe modes: flat (steps) vs staged (stages)**
 - **Approval gates and human-in-loop workflows**
+- **Recipe composition: type: "recipe" for calling sub-recipes**
+- **Context passing and isolation for sub-recipes**
+- **Recursion protection configuration (max_depth, max_total_steps)**
+- **Advanced features: foreach loops, conditional execution, step dependencies**
 
 **Reference:** `docs/RECIPE_SCHEMA.md`
 
@@ -104,6 +108,11 @@ The agent knows common recipe patterns:
 - Error-tolerant pipelines
 - **Staged workflows with approval gates**
 - **Human-in-loop review patterns**
+- **Recipe composition (calling sub-recipes)**
+- **Hierarchical workflows with recipe reuse**
+- **Foreach loops (sequential and parallel iteration)**
+- **Conditional step execution based on context**
+- **Step dependencies and explicit ordering**
 
 **Reference:** `docs/RECIPES_GUIDE.md#design-patterns`
 
@@ -111,14 +120,14 @@ The agent knows common recipe patterns:
 
 The agent should be aware of common Amplifier agents:
 
-- zen-architect (ANALYZE, ARCHITECT, REVIEW modes)
-- bug-hunter (debugging)
-- security-guardian (security audits)
-- performance-optimizer (performance analysis)
-- test-coverage (test generation)
-- integration-specialist (integration tasks)
+- developer-expertise:zen-architect (ANALYZE, ARCHITECT, REVIEW modes)
+- developer-expertise:bug-hunter (debugging)
+- developer-expertise:security-guardian (security audits)
+- developer-expertise:performance-optimizer (performance analysis)
+- developer-expertise:test-coverage (test generation)
+- developer-expertise:integration-specialist (integration tasks)
 
-Users may have custom agents - agent should ask for clarification.
+**Note:** Agent names must include their collection prefix (e.g., `developer-expertise:zen-architect`). Users with custom agents should use their configured agent names with appropriate prefixes.
 
 ### Best Practices
 
@@ -250,6 +259,74 @@ The agent understands:
    - Expected results
    - Common variations
 
+### Pattern 5: Recipe Composition
+
+**User intent:** "How can I reuse existing recipes?" or "Can I call one recipe from another?"
+
+**Agent flow:**
+
+1. **Identify reusable recipes**
+   - "Which existing recipes do you want to combine or reuse?"
+   - "What context does each sub-recipe need?"
+   - "How do the results from sub-recipes relate to each other?"
+
+2. **Design composition structure**
+   - Parent recipe calls sub-recipes using `type: "recipe"`
+   - Pass context explicitly to each sub-recipe (context isolation)
+   - Capture outputs for synthesis or further processing
+
+3. **Configure recursion protection**
+   - Set `max_depth` for allowed nesting levels (default: 2)
+   - Set `max_total_steps` for total step limit (default: 100)
+   - Prevent runaway recursion
+
+4. **Generate composed recipe**
+   - Show complete example with sub-recipe calls
+   - Explain context isolation (sub-recipes only see passed context)
+   - Document recursion limits and their purpose
+   - Provide clear usage instructions
+
+**Example structure:**
+```yaml
+name: "comprehensive-analysis"
+version: "1.0.0"
+
+recursion:
+  max_depth: 3
+  max_total_steps: 50
+
+steps:
+  - id: "code-review"
+    type: "recipe"
+    recipe: "code-review-recipe.yaml"
+    context:
+      file_path: "{{file_path}}"
+    output: "review_results"
+  
+  - id: "security-audit"
+    type: "recipe"
+    recipe: "security-audit-recipe.yaml"
+    context:
+      file_path: "{{file_path}}"
+    output: "security_results"
+  
+  - id: "synthesize"
+    agent: "developer-expertise:zen-architect"
+    mode: "ARCHITECT"
+    prompt: |
+      Synthesize findings:
+      Code Review: {{review_results}}
+      Security: {{security_results}}
+    output: "comprehensive_report"
+```
+
+**Key points to explain:**
+- Sub-recipes execute independently with isolated context
+- Only explicitly passed context is available to sub-recipes
+- Parent recipe can synthesize results from multiple sub-recipes
+- Recursion protection prevents infinite loops
+- DRY principle: reuse tested workflows instead of duplicating steps
+
 ## Example Conversations
 
 ### Example 1: Simple Recipe Creation
@@ -300,19 +377,19 @@ context:
 
 steps:
   - id: "security-analysis"
-    agent: "security-guardian"
+    agent: "developer-expertise:security-guardian"
     prompt: "Perform security analysis on {{file_path}}"
     output: "security_findings"
     timeout: 600
 
   - id: "performance-analysis"
-    agent: "performance-optimizer"
+    agent: "developer-expertise:performance-optimizer"
     prompt: "Analyze {{file_path}} for performance issues and bottlenecks"
     output: "performance_findings"
     timeout: 600
 
   - id: "synthesize-findings"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ANALYZE"
     prompt: |
       Synthesize these findings:
@@ -324,7 +401,7 @@ steps:
     output: "synthesis"
 
   - id: "suggest-improvements"
-    agent: "zen-architect"
+    agent: "developer-expertise:zen-architect"
     mode: "ARCHITECT"
     prompt: |
       Based on this synthesis: {{synthesis}}
@@ -349,7 +426,7 @@ I've validated this recipe and it looks good:
 ✅ All required fields present
 ✅ Step IDs unique
 ✅ Context variables properly referenced
-✅ Agents available (security-guardian, performance-optimizer, zen-architect)
+✅ Agents available (developer-expertise:security-guardian, developer-expertise:performance-optimizer, developer-expertise:zen-architect)
 ✅ Prompts clear and specific
 ✅ Timeouts appropriate (10 minutes per analysis step)
 
@@ -500,6 +577,17 @@ When generating or validating recipes, the agent checks:
 - [ ] Timeouts reasonable for operation type
 - [ ] Context variables well-named
 - [ ] Comments explain non-obvious choices
+
+### Advanced Features
+- [ ] Recipe composition: `type: "recipe"` steps have valid recipe path
+- [ ] Recipe composition: Context passed to sub-recipes is explicit and complete
+- [ ] Recipe composition: Recursion limits configured appropriately
+- [ ] Foreach loops: `foreach` expression references valid array variable
+- [ ] Foreach loops: `parallel: true` specified if concurrent execution desired
+- [ ] Conditional execution: `condition` uses valid expression syntax
+- [ ] Conditional execution: Variables in conditions are defined
+- [ ] Step dependencies: `depends_on` references existing step IDs
+- [ ] Step dependencies: No circular dependency chains
 
 ## Error Handling
 

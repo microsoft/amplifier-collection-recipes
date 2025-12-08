@@ -63,8 +63,8 @@ description: "Systematic dependency upgrade with audit, planning, and validation
 
 **Type:** string (semantic versioning)
 **Constraints:**
-- Must follow semver: `MAJOR.MINOR.PATCH`
-- Example: `1.0.0`, `2.3.1`, `0.1.0-beta`
+- Must follow semver: `MAJOR.MINOR.PATCH` (no pre-release tags)
+- Example: `1.0.0`, `2.3.1`, `0.1.0`
 
 **Purpose:** Track recipe evolution and compatibility.
 
@@ -77,7 +77,7 @@ description: "Systematic dependency upgrade with audit, planning, and validation
 ```yaml
 version: "1.0.0"
 version: "2.1.3"
-version: "0.5.0-alpha"
+version: "0.5.0"
 ```
 
 #### `author` (optional)
@@ -612,24 +612,33 @@ See [Recipe Composition](#recipe-composition) for complete details on recipe ste
 #### `mode` (optional)
 
 **Type:** string
-**Purpose:** Specify agent mode if agent supports multiple modes.
+**Purpose:** Specify how an agent should operate. Modes are agent-specific - consult each agent's documentation to see what modes it supports.
 
-**Example (zen-architect modes):**
+**How it works:** The mode string is prepended to the instruction as `"MODE: {mode}\n\n"` when spawning the agent. Agents that support modes will recognize this prefix and adjust their behavior accordingly.
+
+**Example (zen-architect):**
+
+The `developer-expertise:zen-architect` agent supports three modes:
+- `ANALYZE`: For breaking down problems and designing solutions
+- `ARCHITECT`: For system design and module specification
+- `REVIEW`: For code quality assessment and recommendations
+
 ```yaml
-- agent: "zen-architect"
-  mode: "ANALYZE"    # Analysis mode
+- id: "design"
+  agent: "developer-expertise:zen-architect"
+  mode: "ARCHITECT"
+  prompt: "Design a caching layer for the API"
 
-- agent: "zen-architect"
-  mode: "ARCHITECT"  # Design mode
-
-- agent: "zen-architect"
-  mode: "REVIEW"     # Review mode
+- id: "review"
+  agent: "developer-expertise:zen-architect"
+  mode: "REVIEW"
+  prompt: "Review the implementation for simplicity and maintainability"
 ```
 
-**Behavior:**
-- If omitted, agent uses default mode
-- If specified but agent doesn't support modes, ignored with warning
-- Mode passed to agent via context injection
+**Important notes:**
+- Not all agents support modes. If an agent doesn't recognize the MODE prefix, it will simply treat it as part of the instruction text.
+- Modes are defined by each agent. See agent documentation (e.g., `@developer-expertise:agents/zen-architect.md`) for supported modes and their meanings.
+- If omitted, the agent uses its default behavior.
 
 #### `prompt` (required)
 

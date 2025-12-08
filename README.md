@@ -202,7 +202,9 @@ The `templates/` directory provides starter recipes:
 
 - **simple-recipe.yaml** - Basic sequential workflow
 - **multi-step-recipe.yaml** - Complex multi-stage processing
-- **conditional-recipe.yaml** - Branching based on outcomes (future)
+- **error-handling-recipe.yaml** - Retry and error handling patterns
+
+See `examples/conditional-workflow.yaml` for conditional execution patterns.
 
 Copy, customize, and run.
 

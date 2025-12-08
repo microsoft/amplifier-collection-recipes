@@ -30,7 +30,7 @@ This guide explains what recipes are, when to use them, and how to design effect
 **Composable:**
 - Steps are independent units
 - Steps can be reused across recipes
-- Recipes can invoke other recipes (future)
+- Recipes can invoke other recipes as sub-steps
 
 **Resumable:**
 - Automatic checkpointing after each step
