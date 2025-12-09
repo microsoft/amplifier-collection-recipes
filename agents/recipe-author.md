@@ -71,7 +71,7 @@ The agent has complete knowledge of the recipe schema including:
 - **Recursion protection configuration (max_depth, max_total_steps)**
 - **Advanced features: foreach loops, conditional execution, step dependencies**
 
-**Reference:** `docs/RECIPE_SCHEMA.md`
+**Reference:** @recipes:docs/RECIPE_SCHEMA.md
 
 ### Design Patterns
 
