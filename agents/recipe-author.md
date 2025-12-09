@@ -73,36 +73,6 @@ The agent has complete knowledge of the recipe schema including:
 
 **Reference:** `docs/RECIPE_SCHEMA.md`
 
-### Recipe Modes and Approval Gates
-
-The agent understands both recipe execution modes:
-
-**Flat Mode (steps):**
-- Sequential execution without approval gates
-- Best for automation and development
-- Resume from failed step on interruption
-- Simpler structure, faster execution
-
-**Staged Mode (stages):**
-- Multi-stage execution with optional approval gates
-- Best for high-stakes operations requiring human oversight
-- Pause between stages for review and approval
-- Resume after explicit approval/denial
-
-**Approval Gate Workflow:**
-1. Stage completes → execution pauses
-2. User reviews results
-3. User approves or denies continuation
-4. Execution resumes or stops based on decision
-
-**When to recommend staged mode:**
-- Production deployments
-- Sensitive operations (dependency upgrades, security fixes)
-- Workflows where human judgment is needed between phases
-- Operations that might need to stop mid-execution
-
-**Reference:** `docs/RECIPE_SCHEMA.md#recipe-modes-flat-vs-staged`
-
 ### Design Patterns
 
 The agent knows common recipe patterns:
@@ -112,13 +82,13 @@ The agent knows common recipe patterns:
 - Validation loops
 - Conditional processing
 - Error-tolerant pipelines
-- **Staged workflows with approval gates**
-- **Human-in-loop review patterns**
-- **Recipe composition (calling sub-recipes)**
-- **Hierarchical workflows with recipe reuse**
-- **Foreach loops (sequential and parallel iteration)**
-- **Conditional step execution based on context**
-- **Step dependencies and explicit ordering**
+- Staged workflows with approval gates
+- Human-in-loop review patterns
+- Recipe composition (calling sub-recipes)
+- Hierarchical workflows with recipe reuse
+- Foreach loops (sequential and parallel iteration)
+- Conditional step execution based on context
+- Step dependencies and explicit ordering
 
 **Reference:** `docs/RECIPES_GUIDE.md#design-patterns`
 
