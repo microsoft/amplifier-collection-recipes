@@ -39,4 +39,5 @@ modules = [
 ]
 agents = [
     { name = "recipe-author", path = "agents/recipe-author.md" },
+    { name = "result-validator", path = "agents/result-validator.md" },
 ]

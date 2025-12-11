@@ -804,7 +804,9 @@ class RecipeExecutor:
         else:
             base_dir = project_path
 
-        sub_recipe_path = base_dir / step.recipe
+        # Substitute variables in recipe path (e.g., {{test_recipe}} in foreach loops)
+        recipe_path_str = self.substitute_variables(step.recipe, context)
+        sub_recipe_path = base_dir / recipe_path_str
         if not sub_recipe_path.exists():
             raise FileNotFoundError(f"Sub-recipe not found: {sub_recipe_path}")
 
