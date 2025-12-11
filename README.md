@@ -28,9 +28,10 @@ This collection provides:
 
 1. **tool-recipes** - Tool module for executing recipes
 2. **recipe-author** - Agent for conversational recipe creation
-3. **Complete documentation** - Schema, guide, best practices, troubleshooting
-4. **Examples** - 10+ working recipes across domains
-5. **Templates** - Starter recipes for common patterns
+3. **result-validator** - Agent for objective pass/fail validation of recipe outcomes
+4. **Complete documentation** - Schema, guide, best practices, troubleshooting
+5. **Examples** - 10+ working recipes across domains
+6. **Templates** - Starter recipes for common patterns
 
 ## Installation
 
