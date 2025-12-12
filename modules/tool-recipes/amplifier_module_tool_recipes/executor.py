@@ -590,8 +590,14 @@ class RecipeExecutor:
         Returns:
             Step result from agent
         """
-        # Import spawn helper from app layer (runtime dependency, not available at type-check time)
-        from amplifier_app_cli.session_spawner import spawn_sub_session  # type: ignore[import-not-found]
+        # Get spawn capability from coordinator (registered by app layer)
+        # This follows kernel philosophy: modules request capabilities, apps provide them
+        spawn_fn = self.coordinator.get_capability("session.spawn")
+        if spawn_fn is None:
+            raise RuntimeError(
+                f"Step '{step.id}' requires agent spawning but 'session.spawn' capability not registered. "
+                "Ensure the app layer registers session spawning capabilities."
+            )
 
         # Agent steps must have prompt and agent (validated by models)
         if not step.prompt or not step.agent:
@@ -609,8 +615,8 @@ class RecipeExecutor:
         parent_session = self.coordinator.session
         agents = self.coordinator.config.get("agents", {})
 
-        # Spawn sub-session with agent
-        result = await spawn_sub_session(
+        # Spawn sub-session with agent via capability
+        result = await spawn_fn(
             agent_name=step.agent,
             instruction=instruction,
             parent_session=parent_session,
