@@ -2,7 +2,6 @@
 
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
-from unittest.mock import patch
 
 import pytest
 from amplifier_module_tool_recipes.executor import RecipeExecutor
@@ -14,10 +13,12 @@ from amplifier_module_tool_recipes.models import Step
 
 @pytest.fixture
 def mock_coordinator():
-    """Create a mock coordinator."""
+    """Create a mock coordinator with async spawn capability."""
     coordinator = MagicMock()
     coordinator.session = MagicMock()
     coordinator.config = {"agents": {}}
+    # get_capability returns an AsyncMock that tests can configure
+    coordinator.get_capability.return_value = AsyncMock()
     return coordinator
 
 
@@ -46,11 +47,11 @@ class TestBasicComposition:
     """Tests for basic recipe composition functionality."""
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_basic_composition(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_basic_composition(self, mock_coordinator, mock_session_manager, temp_dir):
         """Sub-recipe executes and returns context."""
+        mock_spawn = mock_coordinator.get_capability.return_value
         # Set up mock to return results for sub-recipe steps
-        mock_spawn.side_effect = AsyncMock(side_effect=["sub_result_1", "sub_result_2"])
+        mock_spawn.side_effect = ["sub_result_1", "sub_result_2"]
 
         # Create sub-recipe file
         sub_recipe_yaml = """
@@ -102,10 +103,10 @@ steps:
         assert result["sub_output"]["result2"] == "sub_result_2"
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_context_passing(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_context_passing(self, mock_coordinator, mock_session_manager, temp_dir):
         """Only explicitly passed context is available in sub-recipe."""
-        mock_spawn.side_effect = AsyncMock(side_effect=["processed_value"])
+        mock_spawn = mock_coordinator.get_capability.return_value
+        mock_spawn.side_effect = ["processed_value"]
 
         sub_recipe_yaml = """
 name: context-test-sub
@@ -150,9 +151,9 @@ steps:
         assert "hello_from_parent" in instruction
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_context_isolation(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_context_isolation(self, mock_coordinator, mock_session_manager, temp_dir):
         """Parent context variables are NOT automatically inherited by sub-recipe."""
+        mock_spawn = mock_coordinator.get_capability.return_value
         # Sub-recipe tries to use parent_only_var which should NOT be available
         sub_recipe_yaml = """
 name: isolation-sub
@@ -189,7 +190,7 @@ steps:
             },
         )
 
-        mock_spawn.side_effect = AsyncMock(side_effect=["result"])
+        mock_spawn.side_effect = ["result"]
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
         result = await executor.execute_recipe(parent_recipe, {}, temp_dir)
 
@@ -200,10 +201,10 @@ steps:
         assert "another_parent_var" not in result["output"]
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_output_contains_sub_context(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_output_contains_sub_context(self, mock_coordinator, mock_session_manager, temp_dir):
         """Step output contains entire sub-recipe's final context."""
-        mock_spawn.side_effect = AsyncMock(side_effect=["res1", "res2", "res3"])
+        mock_spawn = mock_coordinator.get_capability.return_value
+        mock_spawn.side_effect = ["res1", "res2", "res3"]
 
         sub_recipe_yaml = """
 name: multi-output-sub
@@ -302,9 +303,9 @@ steps:
             await executor.execute_recipe(recipe_a, {}, temp_dir)
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_total_steps_limit_enforced(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_total_steps_limit_enforced(self, mock_coordinator, mock_session_manager, temp_dir):
         """Exceeding max_total_steps raises error."""
+        mock_spawn = mock_coordinator.get_capability.return_value
         # Create recipe that would run more than max_total_steps
         sub_recipe_yaml = """
 name: many-steps
@@ -354,16 +355,16 @@ steps:
             context={},
         )
 
-        mock_spawn.side_effect = AsyncMock(side_effect=["r"] * 10)
+        mock_spawn.side_effect = ["r"] * 10
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
         with pytest.raises(ValueError, match="Total steps.*exceeds limit"):
             await executor.execute_recipe(parent_recipe, {}, temp_dir)
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_step_level_recursion_override(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_step_level_recursion_override(self, mock_coordinator, mock_session_manager, temp_dir):
         """Per-step recursion config overrides recipe defaults."""
+        mock_spawn = mock_coordinator.get_capability.return_value
         # Deep sub-recipe that would fail with default depth=5
         # but succeeds with step-level override of depth=10
         sub_recipe_yaml = """
@@ -398,7 +399,7 @@ steps:
             context={},
         )
 
-        mock_spawn.side_effect = AsyncMock(side_effect=["result"])
+        mock_spawn.side_effect = ["result"]
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
         # Should succeed because step-level override allows depth
@@ -410,9 +411,9 @@ class TestErrorHandling:
     """Tests for error handling in composition."""
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_sub_recipe_failure_propagates(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_sub_recipe_failure_propagates(self, mock_coordinator, mock_session_manager, temp_dir):
         """Error in sub-recipe propagates up and raises."""
+        mock_spawn = mock_coordinator.get_capability.return_value
         # Sub-recipe that will fail
         sub_recipe_yaml = """
 name: failing-sub
@@ -457,9 +458,9 @@ class TestCompositionWithLoops:
     """Tests for recipe composition with foreach loops."""
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_composition_with_foreach(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_composition_with_foreach(self, mock_coordinator, mock_session_manager, temp_dir):
         """Recipe step works in foreach loop."""
+        mock_spawn = mock_coordinator.get_capability.return_value
         sub_recipe_yaml = """
 name: process-item
 description: Process single item
@@ -495,7 +496,7 @@ steps:
             context={"items": ["a", "b", "c"]},
         )
 
-        mock_spawn.side_effect = AsyncMock(side_effect=["processed_a", "processed_b", "processed_c"])
+        mock_spawn.side_effect = ["processed_a", "processed_b", "processed_c"]
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
         result = await executor.execute_recipe(parent_recipe, {}, temp_dir)
 
@@ -505,9 +506,9 @@ steps:
         assert len(result["all_results"]) == 3
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_composition_with_condition(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_composition_with_condition(self, mock_coordinator, mock_session_manager, temp_dir):
         """Recipe step respects conditions."""
+        mock_spawn = mock_coordinator.get_capability.return_value
         sub_recipe_yaml = """
 name: conditional-sub
 description: Conditional sub-recipe
@@ -547,9 +548,9 @@ steps:
         assert "conditional-call" in result["_skipped_steps"]
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_composition_with_parallel(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_composition_with_parallel(self, mock_coordinator, mock_session_manager, temp_dir):
         """Recipe step works with parallel: true in foreach."""
+        mock_spawn = mock_coordinator.get_capability.return_value
         sub_recipe_yaml = """
 name: parallel-sub
 description: Parallel sub-recipe
@@ -586,7 +587,7 @@ steps:
             context={"items": ["x", "y", "z"]},
         )
 
-        mock_spawn.side_effect = AsyncMock(side_effect=["rx", "ry", "rz"])
+        mock_spawn.side_effect = ["rx", "ry", "rz"]
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
         result = await executor.execute_recipe(parent_recipe, {}, temp_dir)
 

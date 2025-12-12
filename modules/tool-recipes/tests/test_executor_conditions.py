@@ -2,7 +2,6 @@
 
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
-from unittest.mock import patch
 
 import pytest
 from amplifier_module_tool_recipes.executor import RecipeExecutor
@@ -14,10 +13,12 @@ from amplifier_module_tool_recipes.models import Step
 
 @pytest.fixture
 def mock_coordinator():
-    """Create a mock coordinator."""
+    """Create a mock coordinator with async spawn capability."""
     coordinator = MagicMock()
     coordinator.session = MagicMock()
     coordinator.config = {"agents": {}}
+    # get_capability returns an AsyncMock that tests can configure
+    coordinator.get_capability.return_value = AsyncMock()
     return coordinator
 
 
@@ -78,11 +79,11 @@ class TestExecutorConditions:
     """Tests for condition evaluation in executor."""
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_condition_true_executes_step(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_condition_true_executes_step(self, mock_coordinator, mock_session_manager, temp_dir):
         """Step executes when condition evaluates to true."""
+        mock_spawn = mock_coordinator.get_capability.return_value
         # Mock spawn to return category='simple'
-        mock_spawn.side_effect = AsyncMock(side_effect=["simple", "simple result", "final"])
+        mock_spawn.side_effect = ["simple", "simple result"]
 
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -105,11 +106,11 @@ class TestExecutorConditions:
         assert result["result"] == "simple result"
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_condition_false_skips_step(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_condition_false_skips_step(self, mock_coordinator, mock_session_manager, temp_dir):
         """Step is skipped when condition evaluates to false."""
+        mock_spawn = mock_coordinator.get_capability.return_value
         # Mock spawn to return category='complex'
-        mock_spawn.side_effect = AsyncMock(side_effect=["complex", "complex result"])
+        mock_spawn.side_effect = ["complex", "complex result"]
 
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -136,10 +137,10 @@ class TestExecutorConditions:
         assert "simple_result" not in result
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_skipped_steps_tracked(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_skipped_steps_tracked(self, mock_coordinator, mock_session_manager, temp_dir):
         """Skipped step IDs are tracked in context."""
-        mock_spawn.side_effect = AsyncMock(side_effect=["no", "final"])
+        mock_spawn = mock_coordinator.get_capability.return_value
+        mock_spawn.side_effect = ["no", "final"]
 
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -162,10 +163,10 @@ class TestExecutorConditions:
         assert "conditional" in result["_skipped_steps"]
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_no_condition_always_executes(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_no_condition_always_executes(self, mock_coordinator, mock_session_manager, temp_dir):
         """Steps without condition always execute."""
-        mock_spawn.side_effect = AsyncMock(side_effect=["result1", "result2"])
+        mock_spawn = mock_coordinator.get_capability.return_value
+        mock_spawn.side_effect = ["result1", "result2"]
 
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -187,12 +188,10 @@ class TestExecutorConditions:
         assert result["r2"] == "result2"
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_undefined_variable_in_condition_raises(
-        self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir
-    ):
+    async def test_undefined_variable_in_condition_raises(self, mock_coordinator, mock_session_manager, temp_dir):
         """Undefined variable in condition raises ValueError."""
-        mock_spawn.side_effect = AsyncMock(side_effect=["value"])
+        mock_spawn = mock_coordinator.get_capability.return_value
+        mock_spawn.side_effect = ["value"]
 
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -211,10 +210,10 @@ class TestExecutorConditions:
             await executor.execute_recipe(recipe, {}, temp_dir)
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_condition_with_and_operator(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_condition_with_and_operator(self, mock_coordinator, mock_session_manager, temp_dir):
         """Condition with 'and' operator works correctly."""
-        mock_spawn.side_effect = AsyncMock(side_effect=["yes", "yes", "both_yes"])
+        mock_spawn = mock_coordinator.get_capability.return_value
+        mock_spawn.side_effect = ["yes", "yes", "both_yes"]
 
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -242,10 +241,10 @@ class TestExecutorConditions:
         assert result["result"] == "both_yes"
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_condition_with_or_operator(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_condition_with_or_operator(self, mock_coordinator, mock_session_manager, temp_dir):
         """Condition with 'or' operator works correctly."""
-        mock_spawn.side_effect = AsyncMock(side_effect=["no", "yes", "one_yes"])
+        mock_spawn = mock_coordinator.get_capability.return_value
+        mock_spawn.side_effect = ["no", "yes", "one_yes"]
 
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 

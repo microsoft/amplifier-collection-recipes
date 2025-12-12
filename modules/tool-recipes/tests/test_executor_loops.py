@@ -2,7 +2,6 @@
 
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
-from unittest.mock import patch
 
 import pytest
 from amplifier_module_tool_recipes.executor import RecipeExecutor
@@ -14,10 +13,12 @@ from amplifier_module_tool_recipes.models import Step
 
 @pytest.fixture
 def mock_coordinator():
-    """Create a mock coordinator."""
+    """Create a mock coordinator with async spawn capability."""
     coordinator = MagicMock()
     coordinator.session = MagicMock()
     coordinator.config = {"agents": {}}
+    # get_capability returns an AsyncMock that tests can configure
+    coordinator.get_capability.return_value = AsyncMock()
     return coordinator
 
 
@@ -39,10 +40,10 @@ class TestExecutorLoops:
     """Tests for foreach loop execution."""
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_foreach_iterates_over_list(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_foreach_iterates_over_list(self, mock_coordinator, mock_session_manager, temp_dir):
         """Step iterates over each item in list."""
-        mock_spawn.side_effect = AsyncMock(side_effect=["result_a", "result_b", "result_c"])
+        mock_spawn = mock_coordinator.get_capability.return_value
+        mock_spawn.side_effect = ["result_a", "result_b", "result_c"]
 
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -64,14 +65,15 @@ class TestExecutorLoops:
 
         result = await executor.execute_recipe(recipe, {}, temp_dir)
 
-        # Should have called spawn_sub_session 3 times (once per item)
+        # Should have called spawn 3 times (once per item)
         assert mock_spawn.call_count == 3
         assert result["results"] == ["result_a", "result_b", "result_c"]
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_empty_list_skips_step(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_empty_list_skips_step(self, mock_coordinator, mock_session_manager, temp_dir):
         """Empty foreach list skips step without error."""
+        mock_spawn = mock_coordinator.get_capability.return_value
+
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
         recipe = Recipe(
@@ -99,10 +101,10 @@ class TestExecutorLoops:
         assert "loop-step" in result["_skipped_steps"]
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_collect_aggregates_results(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_collect_aggregates_results(self, mock_coordinator, mock_session_manager, temp_dir):
         """Collect variable contains all iteration results."""
-        mock_spawn.side_effect = AsyncMock(side_effect=["analysis_1", "analysis_2"])
+        mock_spawn = mock_coordinator.get_capability.return_value
+        mock_spawn.side_effect = ["analysis_1", "analysis_2"]
 
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -128,10 +130,10 @@ class TestExecutorLoops:
         assert result["analyses"] == ["analysis_1", "analysis_2"]
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_as_changes_loop_variable_name(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_as_changes_loop_variable_name(self, mock_coordinator, mock_session_manager, temp_dir):
         """Custom 'as' name is used for loop variable."""
-        mock_spawn.side_effect = AsyncMock(side_effect=["done"])
+        mock_spawn = mock_coordinator.get_capability.return_value
+        mock_spawn.side_effect = ["done"]
 
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -158,8 +160,7 @@ class TestExecutorLoops:
         assert mock_spawn.call_count == 1
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_max_iterations_enforced(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_max_iterations_enforced(self, mock_coordinator, mock_session_manager, temp_dir):
         """Exceeding max_iterations fails recipe."""
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -183,8 +184,7 @@ class TestExecutorLoops:
             await executor.execute_recipe(recipe, {}, temp_dir)
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_non_list_foreach_fails(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_non_list_foreach_fails(self, mock_coordinator, mock_session_manager, temp_dir):
         """Non-list foreach variable fails with clear error."""
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -207,8 +207,7 @@ class TestExecutorLoops:
             await executor.execute_recipe(recipe, {}, temp_dir)
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_undefined_foreach_variable_fails(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_undefined_foreach_variable_fails(self, mock_coordinator, mock_session_manager, temp_dir):
         """Undefined foreach variable fails with clear error."""
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -231,10 +230,10 @@ class TestExecutorLoops:
             await executor.execute_recipe(recipe, {}, temp_dir)
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_loop_variable_scoped_to_step(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_loop_variable_scoped_to_step(self, mock_coordinator, mock_session_manager, temp_dir):
         """Loop variable not available after loop completes."""
-        mock_spawn.side_effect = AsyncMock(side_effect=["loop_result", "final_result"])
+        mock_spawn = mock_coordinator.get_capability.return_value
+        mock_spawn.side_effect = ["loop_result", "final_result"]
 
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -268,11 +267,11 @@ class TestExecutorLoops:
         assert "results" in result
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_iteration_failure_stops_loop(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_iteration_failure_stops_loop(self, mock_coordinator, mock_session_manager, temp_dir):
         """Any iteration failure immediately fails the recipe (fail-fast)."""
+        mock_spawn = mock_coordinator.get_capability.return_value
         # First call succeeds, second fails
-        mock_spawn.side_effect = [AsyncMock(return_value="ok")(), Exception("Iteration error")]
+        mock_spawn.side_effect = ["ok", Exception("Iteration error")]
 
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -299,12 +298,10 @@ class TestExecutorLoops:
         assert mock_spawn.call_count == 2
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_output_without_collect_returns_last(
-        self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir
-    ):
+    async def test_output_without_collect_returns_last(self, mock_coordinator, mock_session_manager, temp_dir):
         """Without collect, output stores last iteration result."""
-        mock_spawn.side_effect = AsyncMock(side_effect=["first", "second", "last"])
+        mock_spawn = mock_coordinator.get_capability.return_value
+        mock_spawn.side_effect = ["first", "second", "last"]
 
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -330,10 +327,10 @@ class TestExecutorLoops:
         assert result["result"] == "last"
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_nested_variable_in_foreach(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_nested_variable_in_foreach(self, mock_coordinator, mock_session_manager, temp_dir):
         """Nested variable reference in foreach works."""
-        mock_spawn.side_effect = AsyncMock(side_effect=["result_a", "result_b"])
+        mock_spawn = mock_coordinator.get_capability.return_value
+        mock_spawn.side_effect = ["result_a", "result_b"]
 
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -451,12 +448,10 @@ class TestParallelExecution:
     """Tests for parallel foreach execution."""
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_parallel_foreach_executes_all_items(
-        self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir
-    ):
+    async def test_parallel_foreach_executes_all_items(self, mock_coordinator, mock_session_manager, temp_dir):
         """parallel=True executes all iterations concurrently."""
-        mock_spawn.side_effect = AsyncMock(side_effect=["result_a", "result_b", "result_c"])
+        mock_spawn = mock_coordinator.get_capability.return_value
+        mock_spawn.side_effect = ["result_a", "result_b", "result_c"]
 
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -479,17 +474,17 @@ class TestParallelExecution:
 
         result = await executor.execute_recipe(recipe, {}, temp_dir)
 
-        # Should have called spawn_sub_session 3 times
+        # Should have called spawn 3 times
         assert mock_spawn.call_count == 3
         # Results should be in order
         assert result["results"] == ["result_a", "result_b", "result_c"]
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_parallel_foreach_preserves_order(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_parallel_foreach_preserves_order(self, mock_coordinator, mock_session_manager, temp_dir):
         """Parallel execution preserves result order matching input order."""
+        mock_spawn = mock_coordinator.get_capability.return_value
         # Simulate varying response times by using simple returns
-        mock_spawn.side_effect = AsyncMock(side_effect=["first", "second", "third"])
+        mock_spawn.side_effect = ["first", "second", "third"]
 
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -516,14 +511,14 @@ class TestParallelExecution:
         assert result["ordered_results"] == ["first", "second", "third"]
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_parallel_foreach_fail_fast(self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir):
+    async def test_parallel_foreach_fail_fast(self, mock_coordinator, mock_session_manager, temp_dir):
         """Any parallel iteration failure fails the entire step."""
+        mock_spawn = mock_coordinator.get_capability.return_value
         # Second iteration fails
         mock_spawn.side_effect = [
-            AsyncMock(return_value="ok")(),
+            "ok",
             Exception("Parallel error"),
-            AsyncMock(return_value="ok")(),
+            "ok",
         ]
 
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
@@ -549,11 +544,10 @@ class TestParallelExecution:
             await executor.execute_recipe(recipe, {}, temp_dir)
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_parallel_foreach_empty_list_skips(
-        self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir
-    ):
+    async def test_parallel_foreach_empty_list_skips(self, mock_coordinator, mock_session_manager, temp_dir):
         """Empty list skips parallel step without error."""
+        mock_spawn = mock_coordinator.get_capability.return_value
+
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
         recipe = Recipe(
@@ -580,12 +574,10 @@ class TestParallelExecution:
         assert "parallel-loop" in result.get("_skipped_steps", [])
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_parallel_foreach_with_custom_as_var(
-        self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir
-    ):
+    async def test_parallel_foreach_with_custom_as_var(self, mock_coordinator, mock_session_manager, temp_dir):
         """Parallel execution respects custom 'as' variable name."""
-        mock_spawn.side_effect = AsyncMock(side_effect=["r1", "r2"])
+        mock_spawn = mock_coordinator.get_capability.return_value
+        mock_spawn.side_effect = ["r1", "r2"]
 
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
@@ -612,13 +604,12 @@ class TestParallelExecution:
         assert result["analyses"] == ["r1", "r2"]
 
     @pytest.mark.asyncio
-    @patch("amplifier_app_cli.session_spawner.spawn_sub_session")
-    async def test_parallel_vs_sequential_same_results(
-        self, mock_spawn, mock_coordinator, mock_session_manager, temp_dir
-    ):
+    async def test_parallel_vs_sequential_same_results(self, mock_coordinator, mock_session_manager, temp_dir):
         """Parallel and sequential execution produce identical result structure."""
+        mock_spawn = mock_coordinator.get_capability.return_value
+
         # Test sequential first
-        mock_spawn.side_effect = AsyncMock(side_effect=["s1", "s2", "s3"])
+        mock_spawn.side_effect = ["s1", "s2", "s3"]
         executor = RecipeExecutor(mock_coordinator, mock_session_manager)
 
         sequential_recipe = Recipe(
@@ -643,7 +634,7 @@ class TestParallelExecution:
 
         # Reset and test parallel
         mock_spawn.reset_mock()
-        mock_spawn.side_effect = AsyncMock(side_effect=["s1", "s2", "s3"])
+        mock_spawn.side_effect = ["s1", "s2", "s3"]
 
         parallel_recipe = Recipe(
             name="par-test",
